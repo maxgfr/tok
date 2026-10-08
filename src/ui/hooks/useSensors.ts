@@ -150,5 +150,7 @@ export function useSensors({
     active,
     setThreshold: (value: number) => audioSensor.current?.setThreshold(value),
     audioTrack: () => audioSensor.current?.track ?? null,
+    /** Feeds a candidate from another sensor (vision) into the same fusion. */
+    feed: (candidate: ScoredCandidate) => feedRef.current(candidate),
   }
 }

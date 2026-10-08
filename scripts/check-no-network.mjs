@@ -31,6 +31,26 @@ const ALLOWED_HOSTS = [
   ['github.com', 'the "read the source" link in Settings — an anchor, not a request'],
 ]
 
+// Vendored files whose comments and error strings carry documentation links.
+// Scoped to one file each so the exception cannot leak to app code; the
+// FETCH_LITERAL and NETWORK_APIS checks below still apply to them.
+const VENDORED_INERT = {
+  'models/mediapipe/vision_wasm_module_internal.js': [
+    // Emscripten runtime emitted by MediaPipe: links in comments and messages.
+    'kripken.github.io',
+    'developer.mozilla.org',
+    'unicode.org',
+    'en.wikipedia.org',
+    'www.ietf.org',
+    'tools.ietf.org',
+    'pubs.opengroup.org',
+    'server.com', // a URL-parsing example in a comment
+    'webkit.org',
+    'bugzil.la',
+    'www.khronos.org',
+  ],
+}
+
 // Files worth reading. Images and fonts cannot issue requests.
 const SCANNED = new Set(['.js', '.mjs', '.cjs', '.css', '.html', '.json', '.webmanifest'])
 
@@ -71,8 +91,10 @@ for await (const path of walk(dist)) {
   const source = await readFile(path, 'utf8')
   const where = relative(dist, path)
 
+  const inert = VENDORED_INERT[where.split('\\').join('/')] ?? []
   for (const [match, host] of source.matchAll(URL_PATTERN)) {
-    if (!isAllowed(host.toLowerCase())) violations.push(`${where}: external origin ${match}`)
+    const h = host.toLowerCase()
+    if (!isAllowed(h) && !inert.includes(h)) violations.push(`${where}: external origin ${match}`)
   }
 
   for (const [match] of source.matchAll(FETCH_LITERAL)) {

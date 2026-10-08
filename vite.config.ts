@@ -1,4 +1,7 @@
 /// <reference types="vitest/config" />
+import { readFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
+import { dirname, join } from 'node:path'
 import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
@@ -44,12 +47,60 @@ const contentSecurityPolicy = (): Plugin => ({
   },
 })
 
+// MediaPipe Tasks, made fully local.
+// 1. Its wasm runtime is self-hosted under models/mediapipe/ (served in dev,
+//    emitted in the build) and only downloaded when someone turns vision on.
+// 2. The library posts usage metrics to Google every minute. tok promises that
+//    nothing leaves the device, so the logger's flush is turned into a no-op and
+//    its endpoint string removed. If an upgrade changes that code, the build
+//    stops here instead of shipping a phone-home; the CSP blocks it regardless.
+const require = createRequire(import.meta.url)
+const MEDIAPIPE_DIR = join(dirname(require.resolve('@mediapipe/tasks-vision')), 'wasm')
+const MEDIAPIPE_FILES = ['vision_wasm_module_internal.js', 'vision_wasm_module_internal.wasm']
+const TELEMETRY_URL = '"https://odml.pa.googleapis.com/v1/log"'
+const TELEMETRY_FLUSH = 'flush(t,e){if(this.error)'
+
+const mediapipe = (): Plugin => ({
+  name: 'tok:mediapipe',
+  transform(code, id) {
+    if (!id.includes('@mediapipe/tasks-vision') || !code.includes('odml.pa.googleapis.com')) return
+    const flushes = code.split(TELEMETRY_FLUSH).length - 1
+    const urls = code.split(TELEMETRY_URL).length - 1
+    if (flushes !== 1 || urls !== 1) {
+      throw new Error(
+        `tok:mediapipe: telemetry pattern changed (flush ×${flushes}, url ×${urls}); review before upgrading`,
+      )
+    }
+    return code
+      .replace(TELEMETRY_FLUSH, 'flush(t,e){t?.();return;if(this.error)')
+      .replace(TELEMETRY_URL, '""')
+  },
+  configureServer(server) {
+    server.middlewares.use(`${BASE}models/mediapipe/`, (req, res, next) => {
+      const file = (req.url ?? '').replace(/^\//, '').split('?')[0] ?? ''
+      if (!MEDIAPIPE_FILES.includes(file)) return next()
+      res.setHeader('Content-Type', file.endsWith('.wasm') ? 'application/wasm' : 'text/javascript')
+      res.end(readFileSync(join(MEDIAPIPE_DIR, file)))
+    })
+  },
+  generateBundle() {
+    for (const file of MEDIAPIPE_FILES) {
+      this.emitFile({
+        type: 'asset',
+        fileName: `models/mediapipe/${file}`,
+        source: readFileSync(join(MEDIAPIPE_DIR, file)),
+      })
+    }
+  },
+})
+
 export default defineConfig({
   base: BASE,
   plugins: [
     react(),
     tailwindcss(),
     contentSecurityPolicy(),
+    mediapipe(),
     VitePWA({
       registerType: 'prompt',
       injectRegister: null,
@@ -97,7 +148,8 @@ export default defineConfig({
       },
     }),
   ],
-  worker: { format: 'es' },
+  // Workers are bundled separately: the vision worker is where MediaPipe lives.
+  worker: { format: 'es', plugins: () => [mediapipe()] },
   build: {
     target: 'es2022',
     cssMinify: 'lightningcss',

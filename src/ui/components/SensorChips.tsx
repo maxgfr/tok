@@ -1,8 +1,8 @@
-import { Activity, Mic, MicOff } from 'lucide-react'
+import { Activity, Eye, EyeOff, Mic, MicOff } from 'lucide-react'
 import type { AutoSensor } from '../../engine/sports.ts'
 import type { SensorStatus, Sensors } from '../hooks/useSensors.ts'
 
-const TEXT: Record<'audio' | 'motion', Record<SensorStatus, string>> = {
+const TEXT: Record<AutoSensor, Record<SensorStatus, string>> = {
   audio: {
     off: '',
     starting: 'Mic…',
@@ -16,6 +16,13 @@ const TEXT: Record<'audio' | 'motion', Record<SensorStatus, string>> = {
     on: 'Motion',
     blocked: 'Motion blocked',
     unavailable: 'No motion',
+  },
+  vision: {
+    off: '',
+    starting: 'Ball…',
+    on: 'Tracking',
+    blocked: 'Camera blocked',
+    unavailable: 'No tracking',
   },
 }
 
@@ -35,13 +42,24 @@ export function SensorChips({
   /** The sport's main sensor: only its failures are worth a chip. */
   dominant?: AutoSensor
 }) {
-  const chips = (['audio', 'motion'] as const).filter((k) => status[k] && status[k] !== 'off')
+  const chips = (['audio', 'motion', 'vision'] as const).filter(
+    (k) => status[k] && status[k] !== 'off',
+  )
   return (
     <ul className="flex items-center gap-1.5" aria-label="Counting with">
       {chips.map((kind) => {
         const s = status[kind]!
+        const down = s === 'blocked' || s === 'unavailable'
         const Icon =
-          kind === 'motion' ? Activity : s === 'blocked' || s === 'unavailable' ? MicOff : Mic
+          kind === 'motion'
+            ? Activity
+            : kind === 'vision'
+              ? down
+                ? EyeOff
+                : Eye
+              : down
+                ? MicOff
+                : Mic
         // A secondary sensor that cannot run is not news (a laptop has no
         // accelerometer); the main one failing is.
         if ((s === 'blocked' || s === 'unavailable') && kind !== (dominant ?? 'audio')) return null

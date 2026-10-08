@@ -11,6 +11,7 @@ import { Tally } from '../components/Tally.tsx'
 import type { LiveConfig } from '../config.ts'
 import { useLiveSession, type LiveSession } from '../hooks/useLiveSession.ts'
 import { useCamera } from '../hooks/useCamera.ts'
+import { useVision } from '../hooks/useVision.ts'
 import { useSensors } from '../hooks/useSensors.ts'
 import type { OverlayState } from '../../record/overlay.ts'
 import { deleteVideo } from '../../record/videoStore.ts'
@@ -59,11 +60,21 @@ export function Live({ config }: { config: LiveConfig }) {
     overlay: () => overlay.current(),
     audioTrack: sensors.audioTrack,
   })
+  const vision = useVision({
+    enabled: cameraOn && config.input === 'auto' && preset.weights.vision > 0,
+    video: cameraVideo,
+    preset,
+    onCandidate: sensors.feed,
+    onGround: (t) => session.dispatch({ type: 'end', t, reason: 'ground' }),
+  })
+  const [usedVision, setUsedVision] = useState(false)
+  if (vision === 'on' && !usedVision) setUsedVision(true)
   useWakeLock()
 
   const end = async () => {
     const videos = await stopCamera()
-    const id = await session.finish(videos.length ? { videos } : undefined)
+    const used = [...sensors.active, ...(usedVision ? (['vision'] as const) : [])]
+    const id = await session.finish({ sensors: used, ...(videos.length ? { videos } : {}) })
     if (!id) await Promise.all(videos.map(deleteVideo))
     go(id ? `/history/${encodeURIComponent(id)}` : '/')
   }
@@ -123,7 +134,10 @@ export function Live({ config }: { config: LiveConfig }) {
                 · {config.mode === 'match' ? 'Match' : 'Rally'}
               </span>
             </p>
-            <SensorChips status={sensors.status} dominant={preset.dominant} />
+            <SensorChips
+              status={{ ...sensors.status, ...(vision !== 'off' ? { vision } : {}) }}
+              dominant={preset.dominant}
+            />
             <button
               type="button"
               onClick={() => setCameraOn((on) => !on)}
