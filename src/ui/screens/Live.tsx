@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Minus, Moon, Square, Undo2, Video, VideoOff, X } from 'lucide-react'
 import type { Side } from '../../engine/scoring/index.ts'
 import type { Hit } from '../../engine/types.ts'
@@ -73,12 +73,38 @@ export function Live({ config }: { config: LiveConfig }) {
   useWakeLock()
   useCoach(config, session)
 
-  const end = async () => {
+  // Every way out of this screen closes the session and keeps its videos:
+  // End, but also a back gesture or another tab in the app.
+  const ended = useRef(false)
+  const close = async () => {
+    const hasPlay = session.rallies.length > 0 || session.inRally
+    // StrictMode's rehearsal unmount (nothing played, no camera) must not
+    // count as leaving.
+    if (!hasPlay && !cameraOn) return null
+    ended.current = true
     const videos = await stopCamera()
     const used = [...sensors.active, ...(usedVision ? (['vision'] as const) : [])]
-    const id = await session.finish({ sensors: used, ...(videos.length ? { videos } : {}) })
+    const id = hasPlay
+      ? await session.finish({ sensors: used, ...(videos.length ? { videos } : {}) })
+      : null
     if (!id) await Promise.all(videos.map(deleteVideo))
-    go(id ? `/history/${encodeURIComponent(id)}` : '/')
+    return id
+  }
+  const closeRef = useRef(close)
+  useLayoutEffect(() => {
+    closeRef.current = close
+  })
+  useEffect(
+    () => () => {
+      if (!ended.current) void closeRef.current()
+    },
+    [],
+  )
+
+  const end = async () => {
+    ended.current = true
+    const id = await close()
+    go(id ? `/history/${encodeURIComponent(id)}` : '/', { replace: true })
   }
 
   return (
@@ -96,10 +122,12 @@ export function Live({ config }: { config: LiveConfig }) {
             aria-label="Camera preview"
           />
           {/* Scrim: the figures must stay legible over a sunny court. */}
-          <div className="absolute inset-0 bg-slate/55" aria-hidden="true" />
+          <div className="absolute inset-0 bg-slate/70" aria-hidden="true" />
         </>
       )}
-      <header className="safe-top safe-x relative flex min-h-14 items-center gap-3 border-b border-rule pb-2">
+      <header
+        className={`safe-top safe-x relative flex min-h-14 items-center gap-3 border-b border-rule pb-2 ${cameraOn ? 'bg-slate/90' : ''}`}
+      >
         {confirmEnd ? (
           <fieldset className="flex w-full items-center gap-2">
             <legend className="sr-only">End session</legend>
@@ -175,7 +203,7 @@ export function Live({ config }: { config: LiveConfig }) {
       {config.mode === 'match' && session.match ? (
         <MatchBoard session={session} config={config} />
       ) : (
-        <RallyBoard session={session} />
+        <RallyBoard session={session} bright={cameraOn} />
       )}
       {pocket && <PocketMode onUnlock={() => setPocket(false)} />}
     </div>
@@ -197,8 +225,10 @@ function verdictLine(session: LiveSession): { text: string; tone: string } {
   }
 }
 
-function RallyBoard({ session }: { session: LiveSession }) {
+function RallyBoard({ session, bright }: { session: LiveSession; bright: boolean }) {
   const line = verdictLine(session)
+  // Over a camera feed, secondary text steps up to full chalk.
+  const tone = bright && line.tone === 'text-chalk-dim' ? 'text-chalk' : line.tone
   const celebrating =
     !!session.verdict &&
     (session.verdict.record || session.verdict.todayBest || !!session.verdict.goal)
@@ -217,7 +247,7 @@ function RallyBoard({ session }: { session: LiveSession }) {
             className={`text-[clamp(8rem,min(42vh,58vw),26rem)] ${celebrating ? 'text-best' : 'text-chalk'}`}
           />
           <p
-            className={`figures text-[clamp(1.5rem,4.5vh,2.5rem)] font-semibold ${line.tone}`}
+            className={`figures text-[clamp(1.5rem,4.5vh,2.5rem)] font-semibold ${tone}`}
             aria-live="polite"
           >
             {line.text}
@@ -229,15 +259,18 @@ function RallyBoard({ session }: { session: LiveSession }) {
           />
         </div>
       </main>
-      <footer className="safe-x safe-bottom relative border-t border-rule pt-3">
+      <footer
+        className={`safe-x safe-bottom relative border-t border-rule pt-3 ${bright ? 'bg-slate/90' : ''}`}
+      >
         <div className="mx-auto max-w-2xl">
           <dl className="figures grid grid-cols-3 pb-3 text-center">
-            <Stat label="Today" value={session.todayBest} tone="text-best" />
+            <Stat label="Today" value={session.todayBest} tone="text-best" bright={bright} />
             <Stat
               key={session.verdict?.record ? `r${session.best}` : 'record'}
               label="Record"
               value={session.best}
               tone="text-best"
+              bright={bright}
               pulse={!!session.verdict?.record}
             />
             {session.goal > 0 ? (
@@ -247,7 +280,12 @@ function RallyBoard({ session }: { session: LiveSession }) {
                 tone={session.todayBest >= session.goal ? 'text-best' : 'text-chalk'}
               />
             ) : (
-              <Stat label="Rallies" value={session.rallies.length} tone="text-chalk" />
+              <Stat
+                label="Rallies"
+                value={session.rallies.length}
+                tone="text-chalk"
+                bright={bright}
+              />
             )}
           </dl>
           <div className="grid grid-cols-2 gap-3">
@@ -279,15 +317,19 @@ function Stat({
   value,
   tone,
   pulse = false,
+  bright = false,
 }: {
   label: string
   value: number
   tone: string
   pulse?: boolean
+  bright?: boolean
 }) {
   return (
     <div className="flex flex-col">
-      <dt className="font-sans text-xs font-semibold text-chalk-dim">{label}</dt>
+      <dt className={`font-sans text-xs font-semibold ${bright ? 'text-chalk' : 'text-chalk-dim'}`}>
+        {label}
+      </dt>
       <dd
         className={`text-4xl font-extrabold ${tone}`}
         style={pulse ? { animation: 'chalk-pulse 700ms var(--ease-out-expo) 2' } : undefined}
@@ -373,7 +415,7 @@ function MatchBoard({ session, config }: { session: LiveSession; config: LiveCon
           </p>
         )}
         <p
-          className="figures order-last basis-full text-lg font-semibold text-chalk-dim landscape:order-none landscape:max-w-52 landscape:basis-auto landscape:text-center"
+          className="order-last basis-full text-lg font-semibold text-chalk-dim landscape:order-none landscape:max-w-52 landscape:basis-auto landscape:text-center"
           aria-live="polite"
         >
           {status}

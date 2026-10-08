@@ -1,5 +1,6 @@
 // Microphone → AudioWorklet onset detector → hit candidates on the epoch clock.
 
+import { contextToPerf, perfToEpoch } from '../device/clock.ts'
 import type { Level } from '../engine/onset.ts'
 import type { HitCandidate } from '../engine/types.ts'
 import workletUrl from './onset.worklet.ts?worker&url'
@@ -39,13 +40,8 @@ export interface AudioOptions extends OnsetProcessorOptions {
 }
 
 /** Maps an AudioContext time to epoch ms, the clock every hit lives on. */
-function toEpoch(ctx: AudioContext, contextTime: number): number {
-  const stamp = ctx.getOutputTimestamp?.()
-  if (stamp?.contextTime !== undefined && stamp.performanceTime !== undefined) {
-    return performance.timeOrigin + stamp.performanceTime + (contextTime - stamp.contextTime) * 1000
-  }
-  return performance.timeOrigin + performance.now() - (ctx.currentTime - contextTime) * 1000
-}
+const toEpoch = (ctx: AudioContext, contextTime: number): number =>
+  perfToEpoch(contextToPerf(contextTime, ctx.currentTime, performance.now()))
 
 export async function startAudio(options: AudioOptions): Promise<AudioSensor> {
   const ctx = primeAudio()

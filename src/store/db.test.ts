@@ -98,3 +98,42 @@ describe('video blobs', () => {
     expect(await getVideoBlob('s1.webm')).toBeUndefined()
   })
 })
+
+describe('import safety', () => {
+  const file = (sessions: unknown[]) => ({
+    app: 'tok',
+    version: 1,
+    exportedAt: '',
+    sessions,
+    settings: {},
+  })
+
+  test('sessions of unknown sports or broken shape are skipped, not imported', async () => {
+    const result = await importAll(
+      file([
+        session('ok', 1000),
+        { ...session('curling', 2000), sportId: 'curling' },
+        { id: 'broken' },
+      ]),
+    )
+    expect(result).toEqual({ sessions: 1, skipped: 2 })
+    expect((await listSessions()).map((s) => s.id)).toEqual(['ok'])
+  })
+
+  test('a local session keeps its recordings when a backup replaces it', async () => {
+    const videos = [
+      { file: 'a-1.mp4', store: 'opfs' as const, mimeType: 'video/mp4', startedAt: 1, bytes: 5 },
+    ]
+    await saveSession({ ...session('a', 1000), videos })
+    await importAll(file([{ ...session('a', 1000), endedAt: 5 }]))
+    expect((await getSession('a'))?.videos).toEqual(videos)
+  })
+
+  test('recordings named in a backup are not trusted: they live on another device', async () => {
+    const videos = [
+      { file: 'b-1.mp4', store: 'opfs' as const, mimeType: 'video/mp4', startedAt: 1, bytes: 5 },
+    ]
+    await importAll(file([{ ...session('b', 1000), videos }]))
+    expect((await getSession('b'))?.videos).toBeUndefined()
+  })
+})

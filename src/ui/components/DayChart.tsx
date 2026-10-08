@@ -120,10 +120,10 @@ export function DayChart({ points }: { points: DayPoint[] }) {
               <circle
                 cx={x(i)}
                 cy={y(p.average)}
-                r={3.5}
-                fill="var(--color-chalk-dim)"
-                stroke="var(--color-slate)"
-                strokeWidth={2}
+                r={6}
+                fill="var(--color-slate)"
+                stroke="var(--color-chalk-dim)"
+                strokeWidth={2.5}
               />
               <circle
                 cx={x(i)}

@@ -8,6 +8,7 @@ const VOLLEY: ScoringRules = {
   setsToWin: 3,
   winBy: 2,
   serve: 'winner',
+  setStart: 'alternate',
 }
 const TT: ScoringRules = {
   kind: 'rally',
@@ -77,6 +78,19 @@ describe('rally-point scoring', () => {
   test('with winner-serves, the rally winner serves next', () => {
     expect(replay(VOLLEY, ['B'], 'A').server).toBe('B')
     expect(replay(VOLLEY, ['B', 'A'], 'A').server).toBe('A')
+  })
+
+  test('volleyball: the team that did not serve first in a set serves first in the next', () => {
+    // A served first in set 1 and lost it; A still opened set 1, so B opens set 2.
+    expect(replay(VOLLEY, times('B', 25), 'A').server).toBe('B')
+    // A served first, and won set 1: B still serves first in set 2.
+    expect(replay(VOLLEY, times('A', 25), 'A').server).toBe('B')
+    // And A opens set 3.
+    expect(replay(VOLLEY, [...times('A', 25), ...times('A', 25)], 'A').server).toBe('A')
+  })
+
+  test('badminton: the winner of a game serves first in the next', () => {
+    expect(replay(BADMINTON, times('B', 21), 'A').server).toBe('B')
   })
 
   test('table tennis serve alternates every two points, then every point at deuce', () => {

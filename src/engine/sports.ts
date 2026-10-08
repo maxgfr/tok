@@ -48,6 +48,7 @@ const VOLLEYBALL_RULES: ScoringRules = {
   setsToWin: 3,
   winBy: 2,
   serve: 'winner',
+  setStart: 'alternate',
 }
 
 const TENNIS_RULES: ScoringRules = {

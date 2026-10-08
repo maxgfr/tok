@@ -1,6 +1,13 @@
 // DeviceMotion → impact candidates. iOS asks permission, and only from a tap.
 
+import { perfToEpoch } from '../device/clock.ts'
 import { MotionPeakDetector, type MotionCandidate } from '../engine/motionPeaks.ts'
+
+/** Some browsers stamp motion events on another clock; trust it only when plausible. */
+const saneStamp = (stamp: number): number => {
+  const now = performance.now()
+  return Math.abs(now - stamp) < 1000 ? stamp : now
+}
 
 type PermissionFn = () => Promise<'granted' | 'denied'>
 
@@ -45,7 +52,7 @@ export async function startMotion(options: MotionOptions): Promise<MotionSensor>
     if (a?.x == null || a.y == null || a.z == null) return
     heard = true
     const candidate = detector.push({
-      t: performance.timeOrigin + event.timeStamp,
+      t: perfToEpoch(saneStamp(event.timeStamp)),
       x: a.x,
       y: a.y,
       z: a.z,

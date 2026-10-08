@@ -62,3 +62,8 @@ describe('live session', () => {
     expect(run([tap(0)]).lastEnded).toBeNull()
   })
 })
+
+test('a tick that changes nothing returns the same state, so nothing re-renders', () => {
+  const s = run([tap(0)])
+  expect(liveStep(s, { type: 'tick', t: 100 }, CFG)).toBe(s)
+})

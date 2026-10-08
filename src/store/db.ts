@@ -4,7 +4,7 @@
 
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb'
 import type { Side, ScoringRules } from '../engine/scoring/index.ts'
-import type { Mode, SportId } from '../engine/sports.ts'
+import { SPORTS, type Mode, type SportId } from '../engine/sports.ts'
 import type { Rally, SensorKind } from '../engine/types.ts'
 
 /** The score itself is derived from the rallies' winners (engine/live.ts). */
@@ -134,19 +134,46 @@ function isBackup(value: unknown): value is BackupFile {
   return v.app === 'tok' && Array.isArray(v.sessions) && typeof v.settings === 'object'
 }
 
-/** Merges a backup into the store; sessions with the same id are replaced. */
-export async function importAll(value: unknown): Promise<{ sessions: number }> {
+const SPORT_IDS = new Set<string>(SPORTS.map((s) => s.id))
+
+/** Enough shape to be shown and replayed; anything else is skipped. */
+function isSession(value: unknown): value is SessionRecord {
+  if (typeof value !== 'object' || value === null) return false
+  const v = value as Partial<SessionRecord>
+  return (
+    typeof v.id === 'string' &&
+    typeof v.sportId === 'string' &&
+    SPORT_IDS.has(v.sportId) &&
+    (v.mode === 'rally' || v.mode === 'match') &&
+    typeof v.startedAt === 'number' &&
+    Array.isArray(v.rallies) &&
+    Array.isArray(v.sensors)
+  )
+}
+
+/**
+ * Merges a backup into the store; sessions with the same id are replaced.
+ * Recordings are not in backups: a local session keeps its own, and video
+ * references from another device are dropped.
+ */
+export async function importAll(value: unknown): Promise<{ sessions: number; skipped: number }> {
   if (!isBackup(value)) throw new Error('This file is not a tok backup.')
+  const valid = value.sessions.filter(isSession)
   const d = await db()
+  const local = await Promise.all(valid.map((s) => d.get('sessions', s.id)))
   const tx = d.transaction(['sessions', 'settings'], 'readwrite')
   await Promise.all([
-    ...value.sessions.map((session) => tx.objectStore('sessions').put(session)),
+    ...valid.map((session, i) => {
+      const { videos: _theirs, ...rest } = session
+      const mine = local[i]?.videos
+      return tx.objectStore('sessions').put(mine ? { ...rest, videos: mine } : rest)
+    }),
     ...Object.entries(value.settings).map(([key, setting]) =>
       tx.objectStore('settings').put(setting, key),
     ),
     tx.done,
   ])
-  return { sessions: value.sessions.length }
+  return { sessions: valid.length, skipped: value.sessions.length - valid.length }
 }
 
 /** Asks the browser not to evict our data under storage pressure. */

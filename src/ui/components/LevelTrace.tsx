@@ -45,7 +45,7 @@ export function LevelTrace({ levels, onsets, windowMs = 6000, label }: Props) {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
       ctx.clearRect(0, 0, w, h)
 
-      const now = performance.timeOrigin + performance.now()
+      const now = Date.now()
       const from = now - windowMs
       const points = (levels.current ?? []).filter((p) => p.t >= from)
       let top = 0.05

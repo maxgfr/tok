@@ -93,7 +93,8 @@ export function liveStep(state: LiveState, action: LiveAction, cfg: RallyConfig)
     default: {
       const { state: rally, ended } = rallyStep(state.rally, action, cfg)
       if (ended) return withRallies(state, [...state.rallies, ended], rally)
-      return { ...state, rally }
+      // Ticks mostly change nothing; keep the identity so React skips the render.
+      return rally === state.rally ? state : { ...state, rally }
     }
   }
 }

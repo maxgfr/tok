@@ -48,8 +48,8 @@ export interface LiveSession {
   finish: (extra?: Partial<SessionRecord>) => Promise<string | null>
 }
 
-/** Epoch ms with sub-ms precision; sensor timestamps share this clock. */
-export const now = (): number => performance.timeOrigin + performance.now()
+/** Epoch ms. Sensor timestamps are converted to it (device/clock.ts). */
+export const now = (): number => Date.now()
 
 export function useLiveSession(config: LiveConfig, sensors: SensorKind[]): LiveSession {
   const preset = sport(config.sportId)
@@ -73,6 +73,14 @@ export function useLiveSession(config: LiveConfig, sensors: SensorKind[]): LiveS
   const [history, setHistory] = useState<SessionRecord[]>([])
   const [verdict, setVerdict] = useState<RallyVerdict | null>(null)
   const savedOnce = useRef(false)
+  // Once finish() has started, it owns the last write.
+  const finishing = useRef(false)
+  // A new array with the same sensors must not look like a change.
+  const sensorsKey = sensors.join(',')
+  const stableSensors = useMemo(
+    () => (sensorsKey ? (sensorsKey.split(',') as SensorKind[]) : []),
+    [sensorsKey],
+  )
   const [goal, setGoal] = useState(0)
   useEffect(() => {
     void loadGoal(config.sportId).then(setGoal)
@@ -133,18 +141,19 @@ export function useLiveSession(config: LiveConfig, sensors: SensorKind[]): LiveS
       mode: config.mode,
       startedAt,
       endedAt,
-      sensors,
+      sensors: stableSensors,
       rallies,
       match:
         config.mode === 'match' && preset.scoring
           ? { rules: preset.scoring, firstServer: config.firstServer, names: config.names }
           : null,
     }),
-    [id, config, startedAt, sensors, preset.scoring],
+    [id, config, startedAt, stableSensors, preset.scoring],
   )
 
   // Persist as rallies complete, so a crash or a closed tab loses at most one rally.
   useEffect(() => {
+    if (finishing.current) return
     if (state.rallies.length === 0 && !savedOnce.current) return
     savedOnce.current = true
     void saveSession(record(null, state.rallies))
@@ -176,6 +185,7 @@ export function useLiveSession(config: LiveConfig, sensors: SensorKind[]): LiveS
 
   const finish = useCallback(
     async (extra?: Partial<SessionRecord>): Promise<string | null> => {
+      finishing.current = true
       let rallies = state.rallies
       if (state.rally.phase === 'rally') {
         rallies = liveStep(state, { type: 'end', t: now(), reason: 'manual' }, rallyConfig).rallies

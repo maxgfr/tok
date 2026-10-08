@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, Download, Share2, Trophy } from 'lucide-react'
+import { ArrowLeft, Download, Play, Share2, Trophy } from 'lucide-react'
 import { sport } from '../../engine/sports.ts'
 import { chapters } from '../../record/chapters.ts'
 import { readVideo } from '../../record/videoStore.ts'
 import { chaptersVtt } from '../../record/vtt.ts'
 import { getSession, type SessionRecord } from '../../store/db.ts'
-import { fmtDate, fmtDuration } from '../format.ts'
+import { clock, fmtDate } from '../format.ts'
 
 export function Replay({ id }: { id: string }) {
   const [session, setSession] = useState<SessionRecord | null | undefined>(undefined)
@@ -145,12 +145,12 @@ export function Replay({ id }: { id: string }) {
         </video>
       )}
 
-      <div className="flex flex-wrap gap-2">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         {best && (
           <button
             type="button"
             onClick={() => seek(best.start)}
-            className="flex min-h-12 items-center gap-2 rounded-xl bg-chalk px-4 font-semibold text-slate"
+            className="col-span-2 flex min-h-12 items-center justify-center gap-2 rounded-xl bg-chalk px-4 font-semibold text-slate sm:col-span-1"
           >
             <Trophy size={20} aria-hidden="true" /> Best rally — {best.count}
           </button>
@@ -159,7 +159,7 @@ export function Replay({ id }: { id: string }) {
           type="button"
           onClick={() => void share()}
           disabled={!blob}
-          className="flex min-h-12 items-center gap-2 rounded-xl bg-slate-2 px-4 font-semibold disabled:text-chalk-faint"
+          className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-slate-2 px-4 font-semibold disabled:text-chalk-faint"
         >
           <Share2 size={20} aria-hidden="true" /> Share
         </button>
@@ -167,7 +167,7 @@ export function Replay({ id }: { id: string }) {
           <a
             href={url}
             download={fileName}
-            className="flex min-h-12 items-center gap-2 rounded-xl bg-slate-2 px-4 font-semibold text-chalk no-underline"
+            className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-slate-2 px-4 font-semibold text-chalk no-underline"
           >
             <Download size={20} aria-hidden="true" /> Save
           </a>
@@ -188,6 +188,7 @@ export function Replay({ id }: { id: string }) {
                 <button
                   type="button"
                   onClick={() => seek(c.start)}
+                  aria-label={`Jump to rally ${c.index + 1}, ${c.count} ${preset.unit}, at ${clock(c.start)}`}
                   className="flex min-h-12 w-full items-center gap-4 text-left hover:bg-slate-2"
                 >
                   <span className="figures w-10 text-xl text-chalk-dim">{c.index + 1}</span>
@@ -198,7 +199,8 @@ export function Replay({ id }: { id: string }) {
                   </span>
                   <span className="text-chalk-dim">{preset.unit}</span>
                   <span className="figures ml-auto pr-2 text-lg text-chalk-dim">
-                    {fmtDuration(c.start * 1000)}
+                    <Play size={14} className="mr-1 inline" aria-hidden="true" />
+                    {clock(c.start)}
                   </span>
                 </button>
               </li>

@@ -3,6 +3,10 @@
 // frame-difference tracker follows the smallest moving blob instead.
 
 import { FilesetResolver, ObjectDetector } from '@mediapipe/tasks-vision'
+import { lockToOrigin } from './networkLock.ts'
+
+// Before any MediaPipe code runs: the page's CSP does not reach this worker.
+lockToOrigin(self as unknown as Parameters<typeof lockToOrigin>[0])
 
 export type VisionRequest =
   { type: 'init'; base: string } | { type: 'frame'; bitmap: ImageBitmap; t: number }

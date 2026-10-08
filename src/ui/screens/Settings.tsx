@@ -66,8 +66,10 @@ export function Settings() {
 
   const doImport = async (file: File) => {
     try {
-      const { sessions } = await importAll(JSON.parse(await file.text()))
-      setMessage(`Restored ${sessions} sessions.`)
+      const { sessions, skipped } = await importAll(JSON.parse(await file.text()))
+      setMessage(
+        `Restored ${sessions} sessions.${skipped ? ` Skipped ${skipped} this version cannot read.` : ''}`,
+      )
       refresh()
     } catch (error) {
       setMessage(
@@ -203,8 +205,9 @@ export function Settings() {
                 style={{ width: `${Math.max(1, share * 100)}%` }}
               />
             </div>
-            <p className="figures text-lg text-chalk-dim">
-              {fmtBytes(estimate.usage)} used of {fmtBytes(estimate.quota)} available
+            <p className="text-chalk-dim">
+              <span className="figures text-xl text-chalk">{fmtBytes(estimate.usage)}</span> used of{' '}
+              {fmtBytes(estimate.quota)} available
             </p>
           </>
         ) : (

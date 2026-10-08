@@ -26,6 +26,8 @@ export function useCamera({ enabled, name, overlay, audioTrack }: Options) {
   const status: CameraStatus = !enabled ? 'off' : phase === 'off' ? 'starting' : phase
   const recording = useRef<Recording | null>(null)
   const parts = useRef<Promise<VideoRef | null>[]>([])
+  // Every start gets a fresh file name, even if an earlier part was cancelled.
+  const partNumber = useRef(0)
   const opts = useRef({ overlay, audioTrack, name })
   useEffect(() => {
     opts.current = { overlay, audioTrack, name }
@@ -41,7 +43,11 @@ export function useCamera({ enabled, name, overlay, audioTrack }: Options) {
     void (async () => {
       try {
         stream = await startCamera()
-        if (cancelled || !el) return
+        if (cancelled || !el) {
+          // Switched off (or unmounted) while the camera was starting.
+          for (const track of stream.getTracks()) track.stop()
+          return
+        }
         el.srcObject = stream
         await el.play()
         setPhase('on')
@@ -49,10 +55,11 @@ export function useCamera({ enabled, name, overlay, audioTrack }: Options) {
           video: el,
           audioTrack: opts.current.audioTrack(),
           overlay: () => opts.current.overlay(),
-          name: `${opts.current.name}-${parts.current.length + 1}`,
+          name: `${opts.current.name}-${(partNumber.current += 1)}`,
         })
         if (cancelled) {
-          void rec?.stop()
+          // Keep the part: stop() resolves to its file, or null when empty.
+          if (rec) done.push(rec.stop())
           return
         }
         recording.current = rec

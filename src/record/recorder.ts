@@ -49,7 +49,7 @@ export async function startRecording(opts: {
   recorder.ondataavailable = (e) => {
     if (e.data.size) writer.write(e.data)
   }
-  const startedAt = performance.timeOrigin + performance.now()
+  const startedAt = Date.now()
   recorder.start(1000)
 
   return {

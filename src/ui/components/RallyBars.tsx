@@ -25,7 +25,7 @@ export function RallyBars({ counts, max, label }: Props) {
     <figure className="flex flex-col gap-2">
       <figcaption className="flex items-baseline justify-between text-sm text-chalk-dim">
         <span>{label}</span>
-        <span className="figures text-base text-chalk" aria-live="polite">
+        <span className="text-chalk" aria-live="polite">
           {shown !== undefined && hover !== null ? `Rally ${hover + 1}: ${shown}` : `Best ${best}`}
         </span>
       </figcaption>

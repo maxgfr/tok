@@ -36,6 +36,8 @@ export function useRoute(): Route {
   return parseHash(hash)
 }
 
-export function go(path: string): void {
-  window.location.hash = path
+/** `replace` drops the current entry, so Back cannot return to it (the live screen). */
+export function go(path: string, { replace = false }: { replace?: boolean } = {}): void {
+  if (replace) window.location.replace(`#${path}`)
+  else window.location.hash = path
 }

@@ -23,6 +23,11 @@ export interface RallyScoring {
   /** Hard ceiling where the next point wins regardless of the lead (badminton's 30). */
   cap?: number
   serve: ServeRule
+  /**
+   * With winner-serves: who opens a new set. 'winner' (badminton: the game's
+   * winner) or 'alternate' (volleyball: whoever did not serve first last set).
+   */
+  setStart?: 'winner' | 'alternate'
 }
 
 /** 15-30-40 scoring with games, sets and tie-breaks: tennis and padel. */
@@ -123,7 +128,11 @@ function rallyPoint(rules: RallyScoring, s: State, side: Side): void {
   const reachedCap = rules.cap !== undefined && s.pts[side] >= rules.cap
   if ((s.pts[side] >= target && lead >= rules.winBy) || reachedCap) {
     closeSet(s, { ...s.pts }, side, rules.setsToWin)
-    if (rules.serve !== 'winner') s.setFirst = other(s.setFirst)
+    if (rules.serve !== 'winner' || rules.setStart === 'alternate') {
+      s.setFirst = other(s.setFirst)
+      s.server = s.setFirst
+      if (rules.serve === 'winner') return
+    }
   }
   s.server = rallyServer(rules, s, side)
 }

@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, expect, test } from 'vitest'
 import { clearAll, listSessions } from '../store/db.ts'
@@ -51,4 +51,42 @@ test('match mode gives points to the tapped side', async () => {
   await user.click(screen.getByRole('button', { name: /point to you/i }))
   expect(screen.getByRole('button', { name: /point to me\. score 2/i })).toBeTruthy()
   expect(screen.getByRole('button', { name: /point to you\. score 1/i })).toBeTruthy()
+})
+
+test('leaving the live screen without ending still closes the session', async () => {
+  const user = userEvent.setup()
+  render(<App />)
+  await user.click(await screen.findByRole('radio', { name: /taps only/i }))
+  await user.click(await screen.findByRole('button', { name: /start table tennis/i }))
+  const tapZone = await screen.findByRole('button', { name: /add a hit/i })
+  await user.click(tapZone)
+  await user.click(tapZone)
+  await user.click(screen.getByRole('button', { name: /end rally/i }))
+  // Back gesture / another tab: the route simply changes.
+  act(() => {
+    window.location.hash = '#/history'
+    window.dispatchEvent(new HashChangeEvent('hashchange'))
+  })
+  await waitFor(async () => {
+    const [session] = await listSessions()
+    expect(session?.endedAt).not.toBeNull()
+  })
+})
+
+test('after ending, Back does not reopen the live screen', async () => {
+  const user = userEvent.setup()
+  render(<App />)
+  await user.click(await screen.findByRole('radio', { name: /taps only/i }))
+  await user.click(await screen.findByRole('button', { name: /start table tennis/i }))
+  await user.click(await screen.findByRole('button', { name: /add a hit/i }))
+  await user.click(screen.getByRole('button', { name: /end rally/i }))
+  await user.click(screen.getByRole('button', { name: /end session/i }))
+  const before = window.history.length
+  await user.click(
+    within(screen.getByRole('group', { name: /end session/i })).getByRole('button', {
+      name: 'End',
+    }),
+  )
+  await screen.findByRole('heading', { name: 'Table tennis' })
+  expect(window.history.length).toBe(before)
 })

@@ -48,32 +48,6 @@ export function Home({ onStart }: Props) {
         <p className="text-sm text-chalk-dim">Every hit counts.</p>
       </header>
 
-      <section aria-labelledby="sport-h" className="flex flex-col gap-3">
-        <h2 id="sport-h" className="text-sm font-semibold text-chalk-dim">
-          Sport
-        </h2>
-        <ul className="grid grid-cols-2 border-t border-l border-rule">
-          {ordered.map((s) => {
-            const active = s.id === config.sportId
-            return (
-              <li key={s.id} className="border-r border-b border-rule">
-                <button
-                  type="button"
-                  aria-pressed={active}
-                  onClick={() => pickSport(s.id)}
-                  className={`flex min-h-16 w-full flex-col justify-center px-3 py-2 text-left transition-colors duration-150 ${
-                    active ? 'bg-chalk text-slate' : 'hover:bg-slate-2'
-                  }`}
-                >
-                  <span className="figures text-2xl font-semibold">{s.name}</span>
-                </button>
-              </li>
-            )
-          })}
-        </ul>
-        <p className="text-sm text-chalk-dim">{preset.blurb}</p>
-      </section>
-
       <section aria-labelledby="mode-h" className="flex flex-col gap-3">
         <h2 id="mode-h" className="text-sm font-semibold text-chalk-dim">
           Mode
@@ -148,7 +122,37 @@ export function Home({ onStart }: Props) {
         </section>
       )}
 
-      <div className="sticky bottom-0 mt-auto bg-slate pt-3">
+      <section aria-labelledby="sport-h" className="flex flex-col gap-3">
+        <h2 id="sport-h" className="text-sm font-semibold text-chalk-dim">
+          Sport
+        </h2>
+        <ul className="grid grid-cols-2 border-t border-l border-rule">
+          {ordered.map((s) => {
+            const active = s.id === config.sportId
+            return (
+              <li key={s.id} className="border-r border-b border-rule">
+                <button
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => pickSport(s.id)}
+                  className={`flex min-h-13 w-full flex-col justify-center px-3 py-1.5 text-left transition-colors duration-150 ${
+                    active ? 'bg-chalk text-slate' : 'hover:bg-slate-2'
+                  }`}
+                >
+                  <span className="figures text-2xl font-semibold">{s.name}</span>
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+        <p className="text-sm text-chalk-dim">{preset.blurb}</p>
+      </section>
+
+      <div className="sticky bottom-0 mt-auto flex flex-col gap-2 bg-slate pt-3">
+        <p className="text-center text-sm text-chalk-dim">
+          {config.mode === 'match' ? 'Keep score' : 'Count a rally'} ·{' '}
+          {config.input === 'auto' ? 'listening' : 'taps only'}
+        </p>
         <button
           type="button"
           onClick={start}

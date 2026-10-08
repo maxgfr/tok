@@ -2,7 +2,8 @@
 // text off the phone, so without a local voice tok simply stays quiet.
 
 let quietAfter = 0
-let speaking = false
+/** The utterance playing now; only its end re-opens the mic. */
+let current: SpeechSynthesisUtterance | null = null
 
 function localVoice(): SpeechSynthesisVoice | null {
   const voices = globalThis.speechSynthesis?.getVoices() ?? []
@@ -26,17 +27,19 @@ export function speak(text: string): void {
   utterance.lang = voice.lang
   utterance.rate = 1.05
   const done = () => {
-    speaking = false
+    // cancel() ends the previous utterance asynchronously: ignore it.
+    if (current !== utterance) return
+    current = null
     quietAfter = performance.now() + 400
   }
   utterance.onend = done
   utterance.onerror = done
+  current = utterance
   synth.cancel()
-  speaking = true
   synth.speak(utterance)
 }
 
 /** True while tok is talking (and a moment after): the mic must not count it. */
 export function isSpeaking(now = performance.now()): boolean {
-  return speaking || now < quietAfter
+  return current !== null || now < quietAfter
 }

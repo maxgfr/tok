@@ -155,7 +155,8 @@ export function Lab() {
             <div className="flex items-baseline justify-between">
               <h2 className="text-xl font-semibold">What it hears</h2>
               <p className="figures text-2xl font-extrabold">
-                {heard} <span className="text-base font-semibold text-chalk-dim">hits heard</span>
+                {heard}{' '}
+                <span className="font-sans text-base font-semibold text-chalk-dim">hits heard</span>
               </p>
             </div>
             <LevelTrace

@@ -2,6 +2,7 @@
 // the ground" signals. Runs at ~15 fps and never queues: a frame is only sent
 // when the previous one is answered.
 
+import { perfToEpoch } from '../device/clock.ts'
 import { BallTracker } from '../engine/ballTrack.ts'
 import type { HitCandidate } from '../engine/types.ts'
 import type { VisionReply, VisionRequest } from './vision.worker.ts'
@@ -33,8 +34,8 @@ export function startVision(opts: VisionOptions): { stop: () => void } {
     }
     busy = false
     for (const e of tracker.push(m.t, m.ball ? { t: m.t, ...m.ball } : null)) {
-      if (e.type === 'hit') opts.onCandidate(e.candidate)
-      else opts.onGround(e.t)
+      if (e.type === 'hit') opts.onCandidate({ ...e.candidate, t: perfToEpoch(e.candidate.t) })
+      else opts.onGround(perfToEpoch(e.t))
     }
   }
   send({ type: 'init', base: new URL(import.meta.env.BASE_URL, location.href).href })
@@ -43,7 +44,8 @@ export function startVision(opts: VisionOptions): { stop: () => void } {
     const v = opts.video
     if (busy || stopped || v.readyState < 2 || !v.videoWidth) return
     busy = true
-    const t = performance.timeOrigin + performance.now()
+    // Monotonic here; converted to epoch when an event leaves the tracker.
+    const t = performance.now()
     createImageBitmap(v, {
       resizeWidth: 640,
       resizeHeight: Math.round((640 * v.videoHeight) / v.videoWidth),

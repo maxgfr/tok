@@ -117,7 +117,7 @@ export function SessionDetail({ id }: { id: string }) {
                 #
               </th>
               <th scope="col" className="py-2 pr-2 text-right font-semibold">
-                {preset.unit}
+                {preset.unit.charAt(0).toUpperCase() + preset.unit.slice(1)}
               </th>
               <th scope="col" className="py-2 pr-2 text-right font-semibold">
                 Length

@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { useRegisterSW } from 'virtual:pwa-register/react'
 
 /** Registers the service worker; offers a reload when a new version waits. */
@@ -7,6 +8,13 @@ export function UpdatePrompt() {
     offlineReady: [offlineReady, setOfflineReady],
     updateServiceWorker,
   } = useRegisterSW()
+
+  // "Works offline" is news once; it leaves the thumb zone on its own.
+  useEffect(() => {
+    if (!offlineReady || needRefresh) return
+    const timer = window.setTimeout(() => setOfflineReady(false), 5000)
+    return () => window.clearTimeout(timer)
+  }, [offlineReady, needRefresh, setOfflineReady])
 
   if (!needRefresh && !offlineReady) return null
   return (
