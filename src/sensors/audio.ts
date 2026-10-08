@@ -1,6 +1,6 @@
 // Microphone → AudioWorklet onset detector → hit candidates on the epoch clock.
 
-import { contextToPerf, perfToEpoch } from '../device/clock.ts'
+import { agedPerf, perfToEpoch } from '../device/clock.ts'
 import type { Level } from '../engine/onset.ts'
 import type { HitCandidate } from '../engine/types.ts'
 import workletUrl from './onset.worklet.ts?worker&url'
@@ -39,9 +39,8 @@ export interface AudioOptions extends OnsetProcessorOptions {
   onLevel?: (level: TimedLevel) => void
 }
 
-/** Maps an AudioContext time to epoch ms, the clock every hit lives on. */
-const toEpoch = (ctx: AudioContext, contextTime: number): number =>
-  perfToEpoch(contextToPerf(contextTime, ctx.currentTime, performance.now()))
+/** Epoch ms of an audio event that happened `age` seconds of audio ago. */
+const toEpoch = (age: number): number => perfToEpoch(agedPerf(age, performance.now()))
 
 export async function startAudio(options: AudioOptions): Promise<AudioSensor> {
   const ctx = primeAudio()
@@ -69,14 +68,14 @@ export async function startAudio(options: AudioOptions): Promise<AudioSensor> {
     const m = event.data
     if (m.type === 'onset') {
       options.onCandidate({
-        t: toEpoch(ctx, m.contextTime),
+        t: toEpoch(m.age),
         source: 'audio',
         confidence: m.confidence,
         score: m.score,
       })
     } else {
-      const { type: _type, contextTime, ...level } = m
-      options.onLevel?.({ t: toEpoch(ctx, contextTime), ...level })
+      const { type: _type, age, ...level } = m
+      options.onLevel?.({ t: toEpoch(age), ...level })
     }
   }
   source.connect(node)

@@ -5,7 +5,6 @@
 import { OnsetDetector, type Level } from '../engine/onset.ts'
 
 declare const sampleRate: number
-declare const currentTime: number
 declare function registerProcessor(name: string, ctor: unknown): void
 declare class AudioWorkletProcessor {
   readonly port: MessagePort
@@ -18,13 +17,15 @@ export interface OnsetProcessorOptions {
   threshold: number
 }
 
+/** `age`: seconds of audio processed since the event, by sample count. */
 export type WorkletMessage =
-  | { type: 'onset'; contextTime: number; score: number; confidence: number }
-  | ({ type: 'level'; contextTime: number } & Level)
+  | { type: 'onset'; age: number; score: number; confidence: number }
+  | ({ type: 'level'; age: number } & Level)
 
 class OnsetProcessor extends AudioWorkletProcessor {
   private readonly detector: OnsetDetector
-  private start: number | null = null
+  /** Seconds of audio pushed so far: the detector's own clock. */
+  private elapsed = 0
   private lastLevel = 0
 
   constructor(options: { processorOptions: OnsetProcessorOptions }) {
@@ -44,23 +45,20 @@ class OnsetProcessor extends AudioWorkletProcessor {
   process(inputs: Float32Array[][]): boolean {
     const channel = inputs[0]?.[0]
     if (!channel) return true
-    this.start ??= currentTime
-    for (const onset of this.detector.push(channel)) {
+    const onsets = this.detector.push(channel)
+    this.elapsed += channel.length / sampleRate
+    for (const onset of onsets) {
       const message: WorkletMessage = {
         type: 'onset',
-        contextTime: this.start + onset.t,
+        age: this.elapsed - onset.t,
         score: onset.score,
         confidence: onset.confidence,
       }
       this.port.postMessage(message)
     }
-    if (currentTime - this.lastLevel > 1 / 30) {
-      this.lastLevel = currentTime
-      const level: WorkletMessage = {
-        type: 'level',
-        contextTime: currentTime,
-        ...this.detector.level(),
-      }
+    if (this.elapsed - this.lastLevel > 1 / 30) {
+      this.lastLevel = this.elapsed
+      const level: WorkletMessage = { type: 'level', age: 0, ...this.detector.level() }
       this.port.postMessage(level)
     }
     return true

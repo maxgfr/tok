@@ -1,5 +1,5 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
-import { beforeEach, expect, test } from 'vitest'
+import { beforeEach, expect, test, vi } from 'vitest'
 import type { SensorKind } from '../../engine/types.ts'
 import { clearAll, getSession, type VideoRef } from '../../store/db.ts'
 import { DEFAULT_CONFIG } from '../config.ts'
@@ -40,4 +40,24 @@ test('renders after finish never overwrite the final save', async () => {
     expect(saved?.endedAt).not.toBeNull()
     expect(saved?.videos).toEqual([video])
   })
+})
+
+test('a sensor hit stamped in the future cannot keep a rally open forever', async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true })
+  try {
+    const config = { ...DEFAULT_CONFIG, input: 'auto' as const }
+    const { result } = renderHook(() => useLiveSession(config, ['audio']))
+    const future = Date.now() + 60_000
+    act(() => {
+      result.current.sense({ t: Date.now(), sources: ['audio'], confidence: 1 })
+      result.current.sense({ t: future, sources: ['audio'], confidence: 1 })
+    })
+    // Table tennis times out after 1.5 s of silence.
+    await act(async () => {
+      vi.advanceTimersByTime(3000)
+    })
+    expect(result.current.inRally).toBe(false)
+  } finally {
+    vi.useRealTimers()
+  }
 })

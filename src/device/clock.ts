@@ -13,10 +13,11 @@ export function perfToEpoch(
 }
 
 /**
- * AudioContext seconds → monotonic ms, through the render clock. The output
- * timestamp would add output latency (large with Bluetooth earbuds) to a
- * sound that came in through the microphone.
+ * Monotonic ms of an audio event, from its age: how many seconds of audio the
+ * worklet has processed since it. Sample counts are the one clock the audio
+ * thread always keeps, even where AudioContext.currentTime stalls (no output
+ * device) or the output timestamp adds Bluetooth latency.
  */
-export function contextToPerf(contextTime: number, currentTime: number, perfNow: number): number {
-  return perfNow - (currentTime - contextTime) * 1000
+export function agedPerf(ageSeconds: number, receivedPerf: number): number {
+  return receivedPerf - Math.max(0, ageSeconds) * 1000
 }

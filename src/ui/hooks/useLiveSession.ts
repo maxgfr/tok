@@ -180,7 +180,9 @@ export function useLiveSession(config: LiveConfig, sensors: SensorKind[]): LiveS
 
   const sense = useCallback((hit: Hit) => {
     setVerdict(null)
-    dispatch({ type: 'hit', hit })
+    // A clock glitch must never stamp a hit in the future: the rally would
+    // wait for it and never time out.
+    dispatch({ type: 'hit', hit: { ...hit, t: Math.min(hit.t, now()) } })
   }, [])
 
   const finish = useCallback(
