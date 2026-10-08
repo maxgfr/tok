@@ -1,7 +1,16 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <!-- tok: a ball at the instant of contact, the two arcs its sound. -->
-  <rect width="512" height="512" rx="112" fill="#0d1210"/>
-  <circle cx="226" cy="256" r="78" fill="#d6f25c"/>
-  <path d="M338 168a124 124 0 0 1 0 176" fill="none" stroke="#d6f25c" stroke-width="30" stroke-linecap="round"/>
-  <path d="M392 120a192 192 0 0 1 0 272" fill="none" stroke="#d6f25c" stroke-width="30" stroke-linecap="round" opacity="0.45"/>
+  <!--
+    tok: one chalk tally gate on the slate — four strokes and the cross that
+    closes a five — and the ball, in record yellow, that made the sound.
+    Drawn by hand in this file (no generator).
+  -->
+  <rect width="512" height="512" rx="112" fill="#16201c"/>
+  <g stroke="#eef0e6" stroke-width="30" stroke-linecap="round" fill="none">
+    <path d="M150 150 L146 362"/>
+    <path d="M206 148 L204 364"/>
+    <path d="M262 152 L259 360"/>
+    <path d="M318 149 L316 363"/>
+    <path d="M112 318 L362 186"/>
+  </g>
+  <circle cx="404" cy="132" r="44" fill="#f5d547"/>
 </svg>

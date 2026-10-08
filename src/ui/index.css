@@ -123,6 +123,19 @@
   }
 }
 
+/* The record stat answers a new record. */
+@keyframes chalk-pulse {
+  0% {
+    transform: scale(1);
+  }
+  35% {
+    transform: scale(1.28);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
 @keyframes rise-in {
   from {
     transform: translateY(12px);

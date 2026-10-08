@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { BottomNav } from './components/BottomNav.tsx'
+import { UpdatePrompt } from './components/UpdatePrompt.tsx'
 import type { LiveConfig } from './config.ts'
 import { useRoute } from './router.ts'
 import { History } from './screens/History.tsx'
@@ -30,6 +31,7 @@ export function App() {
         {route.name === 'lab' && <Lab />}
         {route.name === 'replay' && <Replay id={route.id} />}
       </div>
+      <UpdatePrompt />
       <BottomNav route={route} />
     </div>
   )

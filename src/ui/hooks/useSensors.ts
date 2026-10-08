@@ -4,6 +4,7 @@ import type { AutoSensor, SportPreset } from '../../engine/sports.ts'
 import type { Hit, HitCandidate, SensorKind } from '../../engine/types.ts'
 import { startAudio, type AudioSensor, type TimedLevel } from '../../sensors/audio.ts'
 import { startMotion } from '../../sensors/motion.ts'
+import { isSpeaking } from '../../device/speech.ts'
 import { loadThreshold } from '../thresholds.ts'
 
 export type SensorStatus = 'off' | 'starting' | 'on' | 'blocked' | 'unavailable'
@@ -62,6 +63,8 @@ export function useSensors({
   }, [preset])
 
   const feed = (candidate: ScoredCandidate) => {
+    // tok's own voice is not a hit.
+    if (candidate.source === 'audio' && isSpeaking()) return
     handlers.current.onCandidate?.(candidate)
     const hit = fusion.current?.push(candidate)
     if (hit) handlers.current.onHit?.(hit)

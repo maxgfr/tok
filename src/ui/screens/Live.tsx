@@ -3,6 +3,7 @@ import { Minus, Moon, Square, Undo2, Video, VideoOff, X } from 'lucide-react'
 import type { Side } from '../../engine/scoring/index.ts'
 import type { Hit } from '../../engine/types.ts'
 import { useWakeLock } from '../../device/wakeLock.ts'
+import { useCoach } from '../hooks/useCoach.ts'
 import { sport } from '../../engine/sports.ts'
 import { Count } from '../components/Count.tsx'
 import { PocketMode } from '../components/PocketMode.tsx'
@@ -70,6 +71,7 @@ export function Live({ config }: { config: LiveConfig }) {
   const [usedVision, setUsedVision] = useState(false)
   if (vision === 'on' && !usedVision) setUsedVision(true)
   useWakeLock()
+  useCoach(config, session)
 
   const end = async () => {
     const videos = await stopCamera()
@@ -185,6 +187,7 @@ function verdictLine(session: LiveSession): { text: string; tone: string } {
   if (inRally) return { text: preset.unit, tone: 'text-chalk-dim' }
   if (!verdict)
     return { text: count ? preset.unit : 'Tap anywhere for each hit', tone: 'text-chalk-dim' }
+  if (verdict.goal) return { text: `Goal reached — ${verdict.count}!`, tone: 'text-best' }
   if (verdict.record) return { text: `New record — ${verdict.count}!`, tone: 'text-best' }
   if (verdict.todayBest) return { text: `Best today — ${verdict.count}!`, tone: 'text-best' }
   const gap = session.todayBest - verdict.count
@@ -196,7 +199,9 @@ function verdictLine(session: LiveSession): { text: string; tone: string } {
 
 function RallyBoard({ session }: { session: LiveSession }) {
   const line = verdictLine(session)
-  const celebrating = !!session.verdict && (session.verdict.record || session.verdict.todayBest)
+  const celebrating =
+    !!session.verdict &&
+    (session.verdict.record || session.verdict.todayBest || !!session.verdict.goal)
   return (
     <>
       <main className="relative flex flex-1 flex-col">
@@ -228,8 +233,22 @@ function RallyBoard({ session }: { session: LiveSession }) {
         <div className="mx-auto max-w-2xl">
           <dl className="figures grid grid-cols-3 pb-3 text-center">
             <Stat label="Today" value={session.todayBest} tone="text-best" />
-            <Stat label="Record" value={session.best} tone="text-best" />
-            <Stat label="Rallies" value={session.rallies.length} tone="text-chalk" />
+            <Stat
+              key={session.verdict?.record ? `r${session.best}` : 'record'}
+              label="Record"
+              value={session.best}
+              tone="text-best"
+              pulse={!!session.verdict?.record}
+            />
+            {session.goal > 0 ? (
+              <Stat
+                label="Goal"
+                value={session.goal}
+                tone={session.todayBest >= session.goal ? 'text-best' : 'text-chalk'}
+              />
+            ) : (
+              <Stat label="Rallies" value={session.rallies.length} tone="text-chalk" />
+            )}
           </dl>
           <div className="grid grid-cols-2 gap-3">
             <button
@@ -255,11 +274,26 @@ function RallyBoard({ session }: { session: LiveSession }) {
   )
 }
 
-function Stat({ label, value, tone }: { label: string; value: number; tone: string }) {
+function Stat({
+  label,
+  value,
+  tone,
+  pulse = false,
+}: {
+  label: string
+  value: number
+  tone: string
+  pulse?: boolean
+}) {
   return (
     <div className="flex flex-col">
       <dt className="font-sans text-xs font-semibold text-chalk-dim">{label}</dt>
-      <dd className={`text-4xl font-extrabold ${tone}`}>{value}</dd>
+      <dd
+        className={`text-4xl font-extrabold ${tone}`}
+        style={pulse ? { animation: 'chalk-pulse 700ms var(--ease-out-expo) 2' } : undefined}
+      >
+        {value}
+      </dd>
     </div>
   )
 }

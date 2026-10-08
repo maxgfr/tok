@@ -112,8 +112,8 @@ export default defineConfig({
           'Counts every hit of a rally from sound, motion and camera, keeps match score and records your sessions. Everything stays on your device.',
         lang: 'en',
         dir: 'ltr',
-        theme_color: '#0d1210',
-        background_color: '#0d1210',
+        theme_color: '#16201c',
+        background_color: '#16201c',
         display: 'standalone',
         orientation: 'any',
         start_url: `${BASE}`,
@@ -159,5 +159,6 @@ export default defineConfig({
     globals: true,
     setupFiles: ['src/test/setup.ts'],
     include: ['src/**/*.test.{ts,tsx}'],
+    alias: { 'virtual:pwa-register/react': '/src/test/pwa-register-stub.ts' },
   },
 })

@@ -8,6 +8,10 @@ import {
   storageEstimate,
 } from '../../store/db.ts'
 import { clearVideos } from '../../record/videoStore.ts'
+import { SPORTS, type SportId } from '../../engine/sports.ts'
+import { canSpeak } from '../../device/speech.ts'
+import { Toggle } from '../components/Toggle.tsx'
+import { loadCoach, loadGoal, saveCoach, saveGoal, type CoachSettings } from '../coach.ts'
 import { fmtBytes } from '../format.ts'
 
 export function Settings() {
@@ -16,6 +20,31 @@ export function Settings() {
   const [message, setMessage] = useState<string | null>(null)
   const [confirmWipe, setConfirmWipe] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
+  const [coach, setCoach] = useState<CoachSettings | null>(null)
+  const [goalSport, setGoalSport] = useState<SportId>('table-tennis')
+  const [goal, setGoal] = useState(0)
+  const [voiceAvailable, setVoiceAvailable] = useState(canSpeak)
+  useEffect(() => {
+    // Voices arrive asynchronously in some browsers.
+    const synth = globalThis.speechSynthesis
+    if (!synth?.addEventListener) return
+    const update = () => setVoiceAvailable(canSpeak())
+    synth.addEventListener('voiceschanged', update)
+    return () => synth.removeEventListener('voiceschanged', update)
+  }, [])
+
+  useEffect(() => {
+    void loadCoach().then(setCoach)
+  }, [])
+  useEffect(() => {
+    void loadGoal(goalSport).then(setGoal)
+  }, [goalSport])
+
+  const updateCoach = (patch: Partial<CoachSettings>) => {
+    if (!coach) return
+    setCoach({ ...coach, ...patch })
+    void saveCoach(patch)
+  }
 
   const refresh = () => {
     void storageEstimate().then(setEstimate)
@@ -59,6 +88,71 @@ export function Settings() {
   return (
     <main className="safe-x safe-top mx-auto flex w-full max-w-xl flex-1 flex-col gap-8 pb-6">
       <h1 className="figures pt-2 text-5xl font-extrabold">Settings</h1>
+
+      <section aria-labelledby="coach-h" className="flex flex-col gap-3">
+        <h2 id="coach-h" className="text-xl font-semibold">
+          Coach
+        </h2>
+        <Toggle
+          label="Call it out loud"
+          hint={
+            voiceAvailable
+              ? 'Each rally’s count, or the score after every point.'
+              : 'No on-device voice here — tok won’t use one that sends text away.'
+          }
+          checked={!!coach?.voice}
+          disabled={!coach || !voiceAvailable}
+          onChange={(voice) => updateCoach({ voice })}
+        />
+        <Toggle
+          label="Earbuds as a clicker"
+          hint="Experimental. Rally: play = +1, next = end rally, previous = undo. Match: next = point A, previous = point B, play = undo."
+          checked={!!coach?.remote}
+          disabled={!coach}
+          onChange={(remote) => updateCoach({ remote })}
+        />
+        <div className="flex flex-col gap-2">
+          <span className="font-semibold">Goal</span>
+          <div className="grid grid-cols-[1fr_7rem] gap-2">
+            <label className="sr-only" htmlFor="goal-sport">
+              Sport
+            </label>
+            <select
+              id="goal-sport"
+              value={goalSport}
+              onChange={(e) => setGoalSport(e.target.value as SportId)}
+              className="min-h-12 rounded-lg border border-rule bg-slate-2 px-3 text-chalk"
+            >
+              {SPORTS.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+            <label className="sr-only" htmlFor="goal-value">
+              Goal in one rally
+            </label>
+            <input
+              id="goal-value"
+              type="number"
+              inputMode="numeric"
+              min={0}
+              max={9999}
+              placeholder="None"
+              value={goal || ''}
+              onChange={(e) => {
+                const value = Math.max(0, Math.min(9999, Math.round(Number(e.target.value) || 0)))
+                setGoal(value)
+                void saveGoal(goalSport, value)
+              }}
+              className="figures min-h-12 rounded-lg border border-rule bg-slate-2 px-3 text-right text-2xl text-chalk placeholder:text-chalk-faint"
+            />
+          </div>
+          <span className="text-sm text-chalk-dim">
+            One rally to reach. The board cheers the first time each day.
+          </span>
+        </div>
+      </section>
 
       <section aria-labelledby="backup-h" className="flex flex-col gap-3">
         <h2 id="backup-h" className="text-xl font-semibold">

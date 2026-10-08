@@ -3,10 +3,12 @@ import { initialLive, liveStep, matchPoints, type LiveAction } from '../../engin
 import type { RallyConfig } from '../../engine/rally.ts'
 import { replay, type MatchView, type Side } from '../../engine/scoring/index.ts'
 import { sport, type SportPreset } from '../../engine/sports.ts'
+import { judgeRally } from '../../engine/judge.ts'
 import { countHits, summarize } from '../../engine/stats.ts'
 import type { Hit, Rally, SensorKind } from '../../engine/types.ts'
 import { buzz } from '../../device/haptics.ts'
 import { listSessions, saveSession, type SessionRecord } from '../../store/db.ts'
+import { loadGoal } from '../coach.ts'
 import type { LiveConfig } from '../config.ts'
 
 export interface RallyVerdict {
@@ -16,6 +18,8 @@ export interface RallyVerdict {
   record: boolean
   /** Beat today's best (but not the record). */
   todayBest: boolean
+  /** The goal this rally reached, if it is the first to reach it today. */
+  goal: number | null
 }
 
 export interface LiveSession {
@@ -29,6 +33,8 @@ export interface LiveSession {
   awaitingWinner: boolean
   best: number
   todayBest: number
+  /** The player's goal for this sport, 0 when none. */
+  goal: number
   verdict: RallyVerdict | null
   sensors: SensorKind[]
   dispatch: (action: LiveAction) => void
@@ -67,6 +73,10 @@ export function useLiveSession(config: LiveConfig, sensors: SensorKind[]): LiveS
   const [history, setHistory] = useState<SessionRecord[]>([])
   const [verdict, setVerdict] = useState<RallyVerdict | null>(null)
   const savedOnce = useRef(false)
+  const [goal, setGoal] = useState(0)
+  useEffect(() => {
+    void loadGoal(config.sportId).then(setGoal)
+  }, [config.sportId])
 
   useEffect(() => {
     let alive = true
@@ -106,11 +116,15 @@ export function useLiveSession(config: LiveConfig, sensors: SensorKind[]): LiveS
     let earlierBest = 0
     for (const r of earlier)
       earlierBest = Math.max(earlierBest, countHits(r.hits, preset.soundsPerHit))
-    const record = count > Math.max(before.best, earlierBest) && count > 1
-    const todayBest = !record && count > Math.max(before.todayBest, earlierBest) && count > 1
-    setVerdict({ rally, count, record, todayBest })
-    buzz(record ? [40, 60, 40, 60, 120] : [30, 50, 30])
-  }, [state.lastEnded, state.rallies, before, preset.soundsPerHit])
+    const judgement = judgeRally(count, {
+      best: before.best,
+      todayBest: before.todayBest,
+      sessionBest: earlierBest,
+      goal,
+    })
+    setVerdict({ rally, count, ...judgement })
+    buzz(judgement.record || judgement.goal ? [40, 60, 40, 60, 120] : [30, 50, 30])
+  }, [state.lastEnded, state.rallies, before, preset.soundsPerHit, goal])
 
   const record = useCallback(
     (endedAt: number | null, rallies: Rally[]): SessionRecord => ({
@@ -183,6 +197,7 @@ export function useLiveSession(config: LiveConfig, sensors: SensorKind[]): LiveS
     awaitingWinner: config.mode === 'match' && state.awaitingWinner,
     best: Math.max(before.best, sessionBest),
     todayBest: Math.max(before.todayBest, sessionBest),
+    goal,
     verdict: inRally ? null : verdict,
     sensors,
     dispatch,
