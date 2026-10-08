@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState } from 'react'
-import { Minus, Moon, Square, Undo2, X } from 'lucide-react'
+import { Minus, Moon, Square, Undo2, Video, VideoOff, X } from 'lucide-react'
 import type { Side } from '../../engine/scoring/index.ts'
 import type { Hit } from '../../engine/types.ts'
 import { useWakeLock } from '../../device/wakeLock.ts'
@@ -10,11 +10,17 @@ import { SensorChips } from '../components/SensorChips.tsx'
 import { Tally } from '../components/Tally.tsx'
 import type { LiveConfig } from '../config.ts'
 import { useLiveSession, type LiveSession } from '../hooks/useLiveSession.ts'
+import { useCamera } from '../hooks/useCamera.ts'
 import { useSensors } from '../hooks/useSensors.ts'
+import type { OverlayState } from '../../record/overlay.ts'
+import { deleteVideo } from '../../record/videoStore.ts'
 import { go } from '../router.ts'
 
 export function Live({ config }: { config: LiveConfig }) {
   const preset = sport(config.sportId)
+  const [confirmEnd, setConfirmEnd] = useState(false)
+  const [pocket, setPocket] = useState(false)
+  const [cameraOn, setCameraOn] = useState(false)
   const sensing = useRef<(hit: Hit) => void>(() => {})
   const sensors = useSensors({
     enabled: config.input === 'auto',
@@ -25,12 +31,40 @@ export function Live({ config }: { config: LiveConfig }) {
   useLayoutEffect(() => {
     sensing.current = session.sense
   })
-  const [confirmEnd, setConfirmEnd] = useState(false)
-  const [pocket, setPocket] = useState(false)
+  const overlay = useRef<() => OverlayState>(() => ({
+    title: preset.name,
+    unit: preset.unit,
+    count: 0,
+    best: 0,
+    match: null,
+  }))
+  useLayoutEffect(() => {
+    const m = session.match
+    const state: OverlayState = {
+      title: preset.name,
+      unit: preset.unit,
+      count: session.count,
+      best: session.best,
+      match: m ? { names: config.names, points: m.current, sets: m.setsWon } : null,
+    }
+    overlay.current = () => state
+  })
+  const {
+    video: cameraVideo,
+    status: cameraStatus,
+    stop: stopCamera,
+  } = useCamera({
+    enabled: cameraOn,
+    name: session.id,
+    overlay: () => overlay.current(),
+    audioTrack: sensors.audioTrack,
+  })
   useWakeLock()
 
   const end = async () => {
-    const id = await session.finish()
+    const videos = await stopCamera()
+    const id = await session.finish(videos.length ? { videos } : undefined)
+    if (!id) await Promise.all(videos.map(deleteVideo))
     go(id ? `/history/${encodeURIComponent(id)}` : '/')
   }
 
@@ -39,7 +73,20 @@ export function Live({ config }: { config: LiveConfig }) {
       className="fixed inset-0 flex flex-col bg-slate select-none"
       style={{ touchAction: 'manipulation' }}
     >
-      <header className="safe-top safe-x flex min-h-14 items-center gap-3 border-b border-rule pb-2">
+      {cameraOn && (
+        <>
+          <video
+            ref={cameraVideo}
+            muted
+            playsInline
+            className="absolute inset-0 h-full w-full object-cover"
+            aria-label="Camera preview"
+          />
+          {/* Scrim: the figures must stay legible over a sunny court. */}
+          <div className="absolute inset-0 bg-slate/55" aria-hidden="true" />
+        </>
+      )}
+      <header className="safe-top safe-x relative flex min-h-14 items-center gap-3 border-b border-rule pb-2">
         {confirmEnd ? (
           <fieldset className="flex w-full items-center gap-2">
             <legend className="sr-only">End session</legend>
@@ -76,7 +123,28 @@ export function Live({ config }: { config: LiveConfig }) {
                 · {config.mode === 'match' ? 'Match' : 'Rally'}
               </span>
             </p>
-            <SensorChips status={sensors.status} />
+            <SensorChips status={sensors.status} dominant={preset.dominant} />
+            <button
+              type="button"
+              onClick={() => setCameraOn((on) => !on)}
+              aria-pressed={cameraOn}
+              aria-label={cameraOn ? 'Stop the camera' : 'Film the session'}
+              className={`relative grid size-11 place-items-center rounded-lg ${
+                cameraOn ? 'text-chalk' : 'text-chalk-dim hover:text-chalk'
+              }`}
+            >
+              {cameraOn ? (
+                <Video size={22} aria-hidden="true" />
+              ) : (
+                <VideoOff size={22} aria-hidden="true" />
+              )}
+              {cameraStatus === 'recording' && (
+                <span
+                  className="absolute top-2 right-2 size-2 rounded-full bg-side-b"
+                  aria-label="recording"
+                />
+              )}
+            </button>
             <button
               type="button"
               onClick={() => setPocket(true)}
@@ -142,7 +210,7 @@ function RallyBoard({ session }: { session: LiveSession }) {
           />
         </div>
       </main>
-      <footer className="safe-x safe-bottom border-t border-rule pt-3">
+      <footer className="safe-x safe-bottom relative border-t border-rule pt-3">
         <div className="mx-auto max-w-2xl">
           <dl className="figures grid grid-cols-3 pb-3 text-center">
             <Stat label="Today" value={session.todayBest} tone="text-best" />
@@ -240,7 +308,7 @@ function MatchBoard({ session, config }: { session: LiveSession; config: LiveCon
   )
 
   return (
-    <main className="flex flex-1 flex-col landscape:flex-row">
+    <main className="relative flex flex-1 flex-col landscape:flex-row">
       {half('A')}
       <div className="safe-x flex flex-wrap items-center gap-x-4 gap-y-1 border-y border-rule bg-slate-2 py-2 landscape:flex-col landscape:flex-nowrap landscape:justify-center landscape:border-x landscape:border-y-0 landscape:px-3">
         <div

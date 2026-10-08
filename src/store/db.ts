@@ -24,13 +24,25 @@ export interface SessionRecord {
   sensors: SensorKind[]
   rallies: Rally[]
   match: MatchRecord | null
-  /** OPFS file holding the session's recording, if any. */
-  video?: { file: string; mimeType: string; startedAt: number; bytes: number }
+  /** Recordings, one per stretch the camera was on. */
+  videos?: VideoRef[]
+}
+
+export interface VideoRef {
+  /** File name in OPFS `recordings/`, or key in the `videos` store. */
+  file: string
+  store: 'opfs' | 'idb'
+  mimeType: string
+  /** Epoch ms of the first frame: chapters are measured from here. */
+  startedAt: number
+  bytes: number
 }
 
 interface TokDB extends DBSchema {
   sessions: { key: string; value: SessionRecord; indexes: { startedAt: number } }
   settings: { key: string; value: unknown }
+  /** Recordings for browsers without a writable OPFS (Safari). */
+  videos: { key: string; value: Blob }
 }
 
 const DB_NAME = 'tok'
@@ -38,11 +50,14 @@ const DB_NAME = 'tok'
 let dbPromise: Promise<IDBPDatabase<TokDB>> | null = null
 
 function db(): Promise<IDBPDatabase<TokDB>> {
-  dbPromise ??= openDB<TokDB>(DB_NAME, 1, {
-    upgrade(database) {
-      const sessions = database.createObjectStore('sessions', { keyPath: 'id' })
-      sessions.createIndex('startedAt', 'startedAt')
-      database.createObjectStore('settings')
+  dbPromise ??= openDB<TokDB>(DB_NAME, 2, {
+    upgrade(database, oldVersion) {
+      if (oldVersion < 1) {
+        const sessions = database.createObjectStore('sessions', { keyPath: 'id' })
+        sessions.createIndex('startedAt', 'startedAt')
+        database.createObjectStore('settings')
+      }
+      if (oldVersion < 2) database.createObjectStore('videos')
     },
   })
   return dbPromise
@@ -77,7 +92,19 @@ export async function setSetting(key: string, value: unknown): Promise<void> {
 
 export async function clearAll(): Promise<void> {
   const d = await db()
-  await Promise.all([d.clear('sessions'), d.clear('settings')])
+  await Promise.all([d.clear('sessions'), d.clear('settings'), d.clear('videos')])
+}
+
+export async function putVideoBlob(key: string, blob: Blob): Promise<void> {
+  await (await db()).put('videos', blob, key)
+}
+
+export async function getVideoBlob(key: string): Promise<Blob | undefined> {
+  return (await db()).get('videos', key)
+}
+
+export async function deleteVideoBlob(key: string): Promise<void> {
+  await (await db()).delete('videos', key)
 }
 
 export interface BackupFile {

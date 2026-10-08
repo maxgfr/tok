@@ -39,7 +39,7 @@ export interface LiveSession {
   endRally: () => void
   point: (side: Side) => void
   undoPoint: () => void
-  finish: () => Promise<string | null>
+  finish: (extra?: Partial<SessionRecord>) => Promise<string | null>
 }
 
 /** Epoch ms with sub-ms precision; sensor timestamps share this clock. */
@@ -160,15 +160,18 @@ export function useLiveSession(config: LiveConfig, sensors: SensorKind[]): LiveS
     dispatch({ type: 'hit', hit })
   }, [])
 
-  const finish = useCallback(async (): Promise<string | null> => {
-    let rallies = state.rallies
-    if (state.rally.phase === 'rally') {
-      rallies = liveStep(state, { type: 'end', t: now(), reason: 'manual' }, rallyConfig).rallies
-    }
-    if (rallies.length === 0) return null
-    await saveSession(record(Date.now(), rallies))
-    return id
-  }, [state, rallyConfig, record, id])
+  const finish = useCallback(
+    async (extra?: Partial<SessionRecord>): Promise<string | null> => {
+      let rallies = state.rallies
+      if (state.rally.phase === 'rally') {
+        rallies = liveStep(state, { type: 'end', t: now(), reason: 'manual' }, rallyConfig).rallies
+      }
+      if (rallies.length === 0) return null
+      await saveSession({ ...record(Date.now(), rallies), ...extra })
+      return id
+    },
+    [state, rallyConfig, record, id],
+  )
 
   return {
     preset,

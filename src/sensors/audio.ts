@@ -27,6 +27,8 @@ export interface TimedLevel extends Level {
 }
 
 export interface AudioSensor {
+  /** The raw mic track, reused for the recording's soundtrack. */
+  track: MediaStreamTrack | null
   setThreshold: (value: number) => void
   stop: () => void
 }
@@ -85,6 +87,7 @@ export async function startAudio(options: AudioOptions): Promise<AudioSensor> {
   if (ctx.state === 'suspended') await ctx.resume()
 
   return {
+    track: stream.getAudioTracks()[0] ?? null,
     setThreshold: (value) => node.port.postMessage({ type: 'threshold', value }),
     stop: () => {
       node.port.onmessage = null

@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Fusion } from '../../engine/fusion.ts'
 import type { AutoSensor, SportPreset } from '../../engine/sports.ts'
 import type { Hit, HitCandidate, SensorKind } from '../../engine/types.ts'
-import { startAudio, type TimedLevel } from '../../sensors/audio.ts'
+import { startAudio, type AudioSensor, type TimedLevel } from '../../sensors/audio.ts'
 import { startMotion } from '../../sensors/motion.ts'
 import { loadThreshold } from '../thresholds.ts'
 
@@ -51,7 +51,7 @@ export function useSensors({
   useLayoutEffect(() => {
     handlers.current = { onHit, onCandidate, onLevel }
   })
-  const audioSensor = useRef<{ setThreshold: (v: number) => void; stop: () => void } | null>(null)
+  const audioSensor = useRef<AudioSensor | null>(null)
   const wanted = use ?? (['audio', 'motion'] as AutoSensor[])
   const wantAudio = enabled && wanted.includes('audio') && preset.weights.audio > 0
   const wantMotion = enabled && wanted.includes('motion') && preset.weights.motion > 0
@@ -149,5 +149,6 @@ export function useSensors({
     status,
     active,
     setThreshold: (value: number) => audioSensor.current?.setThreshold(value),
+    audioTrack: () => audioSensor.current?.track ?? null,
   }
 }

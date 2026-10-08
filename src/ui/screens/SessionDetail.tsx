@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
-import { ArrowLeft, Trash2 } from 'lucide-react'
+import { ArrowLeft, Film, Trash2 } from 'lucide-react'
 import { matchPoints } from '../../engine/live.ts'
 import { replay } from '../../engine/scoring/index.ts'
 import { sport } from '../../engine/sports.ts'
 import { countHits, tempo } from '../../engine/stats.ts'
+import { deleteVideo } from '../../record/videoStore.ts'
 import { deleteSession, getSession, type SessionRecord } from '../../store/db.ts'
 import { RallyBars } from '../components/RallyBars.tsx'
 import { fmtDate, fmtDuration, fmtTime, plural } from '../format.ts'
@@ -43,6 +44,7 @@ export function SessionDetail({ id }: { id: string }) {
       : null
 
   const remove = async () => {
+    await Promise.all((session.videos ?? []).map(deleteVideo))
     await deleteSession(session.id)
     go('/history')
   }
@@ -92,6 +94,15 @@ export function SessionDetail({ id }: { id: string }) {
         <strong className="figures text-2xl font-semibold text-chalk">{total}</strong> {preset.unit}{' '}
         in all
       </p>
+
+      {session.videos?.length ? (
+        <a
+          href={`#/replay/${encodeURIComponent(session.id)}`}
+          className="flex min-h-12 items-center gap-2 self-start rounded-xl bg-chalk px-4 font-semibold text-slate no-underline"
+        >
+          <Film size={20} aria-hidden="true" /> Watch the replay
+        </a>
+      ) : null}
 
       {hitRallies.length > 0 && <RallyBars counts={counts} label="Each rally, in order" />}
 

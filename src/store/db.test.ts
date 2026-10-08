@@ -86,3 +86,15 @@ describe('backup', () => {
     await expect(importAll({ app: 'other' })).rejects.toThrow(/not a tok backup/i)
   })
 })
+
+describe('video blobs', () => {
+  test('a recording saved in IndexedDB can be read back and deleted', async () => {
+    const { putVideoBlob, getVideoBlob, deleteVideoBlob } = await import('./db.ts')
+    await putVideoBlob('s1.webm', new Blob(['abc'], { type: 'video/webm' }))
+    // jsdom's Blob does not survive fake-indexeddb's structured clone byte for
+    // byte, so this checks the record round-trip; real bytes are covered in E2E.
+    expect(await getVideoBlob('s1.webm')).toBeDefined()
+    await deleteVideoBlob('s1.webm')
+    expect(await getVideoBlob('s1.webm')).toBeUndefined()
+  })
+})

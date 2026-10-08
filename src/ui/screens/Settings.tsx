@@ -7,6 +7,7 @@ import {
   requestPersistence,
   storageEstimate,
 } from '../../store/db.ts'
+import { clearVideos } from '../../record/videoStore.ts'
 import { fmtBytes } from '../format.ts'
 
 export function Settings() {
@@ -47,7 +48,7 @@ export function Settings() {
   }
 
   const wipe = async () => {
-    await clearAll()
+    await Promise.all([clearAll(), clearVideos()])
     setConfirmWipe(false)
     setMessage('Everything is wiped. Fresh board.')
     refresh()
@@ -149,7 +150,7 @@ export function Settings() {
               onClick={() => void wipe()}
               className="min-h-12 rounded-xl bg-side-b px-4 font-semibold text-slate"
             >
-              Delete all sessions and settings
+              Delete all sessions, videos and settings
             </button>
           </div>
         ) : (
