@@ -1,1 +1,147 @@
 @import 'tailwindcss';
+@import '@fontsource/barlow-condensed/latin-600.css';
+@import '@fontsource/barlow-condensed/latin-800.css';
+
+/*
+  tok — the beach-bar chalkboard. Slate ground, chalk-white figures, coloured
+  chalk that always means something: yellow = best/record, blue = side A,
+  coral = side B. No texture, no hand lettering: the world lives in palette,
+  the condensed figures and the tally strokes.
+*/
+@theme {
+  --color-slate: #16201c;
+  --color-slate-2: #1d2924;
+  --color-slate-3: #26352f;
+  --color-rule: #34463e;
+  --color-chalk: #eef0e6;
+  --color-chalk-dim: #a3ada6;
+  --color-chalk-faint: #6f7d75;
+  --color-best: #f5d547;
+  --color-side-a: #6fc3e8;
+  --color-side-b: #f28c7a;
+  --color-live: #8fe3a0;
+  /* Chart series, validated for CVD and the dark band against the slate. */
+  --color-series-best: #b08c1c;
+  --color-series-avg: #1f9c8c;
+
+  --font-figure: 'Barlow Condensed', ui-sans-serif, system-ui, sans-serif;
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@layer base {
+  :root {
+    color-scheme: dark;
+    background: var(--color-slate);
+    color: var(--color-chalk);
+    -webkit-tap-highlight-color: transparent;
+    -webkit-font-smoothing: antialiased;
+    accent-color: var(--color-best);
+    caret-color: var(--color-best);
+  }
+
+  body {
+    min-height: 100dvh;
+    background: var(--color-slate);
+    font-family: var(--font-sans);
+    overscroll-behavior: none;
+  }
+
+  ::selection {
+    background: var(--color-best);
+    color: var(--color-slate);
+  }
+
+  :focus-visible {
+    outline: 3px solid var(--color-best);
+    outline-offset: 3px;
+    border-radius: 6px;
+  }
+
+  * {
+    scrollbar-color: var(--color-rule) transparent;
+    scrollbar-width: thin;
+  }
+
+  a {
+    text-underline-offset: 0.2em;
+  }
+}
+
+@utility figures {
+  font-family: var(--font-figure);
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings:
+    'tnum' 1,
+    'lnum' 1;
+}
+
+@utility safe-x {
+  padding-left: max(1rem, env(safe-area-inset-left));
+  padding-right: max(1rem, env(safe-area-inset-right));
+}
+
+@utility safe-top {
+  padding-top: max(0.75rem, env(safe-area-inset-top));
+}
+
+@utility safe-bottom {
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+}
+
+/* A chalk stroke drawing itself: the hit made visible. */
+@keyframes stroke-in {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* A digit rolling into its cell; only the cell that changed moves. */
+@keyframes digit-in {
+  from {
+    transform: translateY(0.1em);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+/* Nothing disappears, it cancels: struck through, then gone. */
+@keyframes cancel-out {
+  0% {
+    opacity: 1;
+  }
+  60% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes rise-in {
+  from {
+    transform: translateY(12px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    transition-duration: 1ms !important;
+  }
+}
