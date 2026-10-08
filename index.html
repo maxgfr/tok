@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+
+    <title>tok — rally & score counter</title>
+    <meta
+      name="description"
+      content="Counts every hit of a rally from sound, motion and camera — beach rackets, volleyball, table tennis and more — keeps match score and records your sessions. Everything runs in your browser: no account, no server."
+    />
+
+    <!-- Relative, deliberately: Vite prefixes the base onto a leading-slash
+         href in dev but not in the build, so an absolute path is doubled on
+         the dev server. The page always sits at the base, so this resolves
+         correctly in both. -->
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+    <link rel="apple-touch-icon" href="apple-touch-icon-180x180.png" />
+    <meta name="theme-color" content="#0d1210" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="referrer" content="no-referrer" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <noscript>
+      tok runs entirely in your browser, so it needs JavaScript. Nothing is sent anywhere.
+    </noscript>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
