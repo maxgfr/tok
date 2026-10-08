@@ -1,10 +1,11 @@
 import { useLayoutEffect, useRef, useState } from 'react'
-import { Minus, Square, Undo2, X } from 'lucide-react'
+import { Minus, Moon, Square, Undo2, X } from 'lucide-react'
 import type { Side } from '../../engine/scoring/index.ts'
-import type { HitCandidate } from '../../engine/types.ts'
+import type { Hit } from '../../engine/types.ts'
 import { useWakeLock } from '../../device/wakeLock.ts'
 import { sport } from '../../engine/sports.ts'
 import { Count } from '../components/Count.tsx'
+import { PocketMode } from '../components/PocketMode.tsx'
 import { SensorChips } from '../components/SensorChips.tsx'
 import { Tally } from '../components/Tally.tsx'
 import type { LiveConfig } from '../config.ts'
@@ -14,17 +15,18 @@ import { go } from '../router.ts'
 
 export function Live({ config }: { config: LiveConfig }) {
   const preset = sport(config.sportId)
-  const sensing = useRef<(c: HitCandidate) => void>(() => {})
+  const sensing = useRef<(hit: Hit) => void>(() => {})
   const sensors = useSensors({
     enabled: config.input === 'auto',
     preset,
-    onCandidate: (c) => sensing.current(c),
+    onHit: (hit) => sensing.current(hit),
   })
   const session = useLiveSession(config, sensors.active)
   useLayoutEffect(() => {
     sensing.current = session.sense
   })
   const [confirmEnd, setConfirmEnd] = useState(false)
+  const [pocket, setPocket] = useState(false)
   useWakeLock()
 
   const end = async () => {
@@ -67,7 +69,7 @@ export function Live({ config }: { config: LiveConfig }) {
             >
               <X size={26} aria-hidden="true" />
             </button>
-            <p className="flex-1 truncate font-semibold">
+            <p className="min-w-0 flex-1 truncate font-semibold">
               {session.preset.name}
               <span className="text-chalk-dim">
                 {' '}
@@ -75,6 +77,14 @@ export function Live({ config }: { config: LiveConfig }) {
               </span>
             </p>
             <SensorChips status={sensors.status} />
+            <button
+              type="button"
+              onClick={() => setPocket(true)}
+              aria-label="Pocket mode: black screen, touches locked"
+              className="grid size-11 place-items-center rounded-lg text-chalk-dim hover:text-chalk"
+            >
+              <Moon size={22} aria-hidden="true" />
+            </button>
           </>
         )}
       </header>
@@ -83,6 +93,7 @@ export function Live({ config }: { config: LiveConfig }) {
       ) : (
         <RallyBoard session={session} />
       )}
+      {pocket && <PocketMode onUnlock={() => setPocket(false)} />}
     </div>
   )
 }

@@ -2,13 +2,12 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Mic } from 'lucide-react'
 import { calibrateThreshold } from '../../engine/onset.ts'
 import { SPORTS, sport, type SportId } from '../../engine/sports.ts'
-import type { HitCandidate } from '../../engine/types.ts'
 import { primeAudio } from '../../sensors/audio.ts'
 import { Count } from '../components/Count.tsx'
 import { LevelTrace, type TracePoint } from '../components/LevelTrace.tsx'
 import { SensorChips } from '../components/SensorChips.tsx'
 import { loadConfig } from '../config.ts'
-import { useSensors } from '../hooks/useSensors.ts'
+import { useSensors, type ScoredCandidate } from '../hooks/useSensors.ts'
 import {
   loadThreshold,
   saveThreshold,
@@ -47,7 +46,7 @@ export function Lab() {
   }, [sportId])
 
   const preset = sportId ? sport(sportId) : SPORTS[0]!
-  const onCandidate = (c: HitCandidate & { score?: number }) => {
+  const onCandidate = (c: ScoredCandidate) => {
     const cal = calibrating.current
     if (cal.phase === 'listening') {
       setCalibration((prev) =>
@@ -69,6 +68,7 @@ export function Lab() {
     // The worklet listens at the calibration level; play-level filtering
     // happens above, so the slider moves the bar without restarting the mic.
     threshold: CALIBRATION_THRESHOLD,
+    use: ['audio'],
     onCandidate,
     onLevel: (l) => {
       // Draw the bar the player set, not the eager one calibration listens at.

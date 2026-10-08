@@ -1,45 +1,78 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import type { SportPreset } from '../../engine/sports.ts'
-import type { HitCandidate, SensorKind } from '../../engine/types.ts'
+import { Fusion } from '../../engine/fusion.ts'
+import type { AutoSensor, SportPreset } from '../../engine/sports.ts'
+import type { Hit, HitCandidate, SensorKind } from '../../engine/types.ts'
 import { startAudio, type TimedLevel } from '../../sensors/audio.ts'
+import { startMotion } from '../../sensors/motion.ts'
 import { loadThreshold } from '../thresholds.ts'
 
 export type SensorStatus = 'off' | 'starting' | 'on' | 'blocked' | 'unavailable'
 
 export interface Sensors {
-  status: Partial<Record<Exclude<SensorKind, 'manual'>, SensorStatus>>
+  status: Partial<Record<AutoSensor, SensorStatus>>
   /** Sources currently feeding hits, `manual` always included. */
   active: SensorKind[]
 }
 
+export type ScoredCandidate = HitCandidate & { score?: number }
+
 interface Options {
   enabled: boolean
   preset: SportPreset
-  onCandidate: (candidate: HitCandidate) => void
+  /** Fused hits — what a session counts. */
+  onHit?: (hit: Hit) => void
+  /** Raw candidates before fusion (Lab). */
+  onCandidate?: (candidate: ScoredCandidate) => void
   onLevel?: (level: TimedLevel) => void
-  /** Overrides the stored per-sport threshold (Lab). */
+  /** Overrides the stored per-sport audio threshold (Lab). */
   threshold?: number
+  /** Which sensors to try; defaults to every sensor the sport trusts. */
+  use?: AutoSensor[]
 }
 
-/** Starts the sensors a session uses and reports what is actually running. */
+const failure = (error: unknown): SensorStatus => {
+  const name = (error as DOMException | undefined)?.name
+  return name === 'NotAllowedError' || name === 'SecurityError' ? 'blocked' : 'unavailable'
+}
+
+/** Starts the sensors a session uses, fuses their candidates, reports what runs. */
 export function useSensors({
   enabled,
   preset,
+  onHit,
   onCandidate,
   onLevel,
   threshold,
-}: Options): Sensors & {
-  setThreshold: (value: number) => void
-} {
+  use,
+}: Options) {
   const [audio, setAudio] = useState<SensorStatus>('off')
-  const handlers = useRef({ onCandidate, onLevel })
+  const [motion, setMotion] = useState<SensorStatus>('off')
+  const handlers = useRef({ onHit, onCandidate, onLevel })
   useLayoutEffect(() => {
-    handlers.current = { onCandidate, onLevel }
+    handlers.current = { onHit, onCandidate, onLevel }
   })
-  const sensor = useRef<{ setThreshold: (v: number) => void; stop: () => void } | null>(null)
+  const audioSensor = useRef<{ setThreshold: (v: number) => void; stop: () => void } | null>(null)
+  const wanted = use ?? (['audio', 'motion'] as AutoSensor[])
+  const wantAudio = enabled && wanted.includes('audio') && preset.weights.audio > 0
+  const wantMotion = enabled && wanted.includes('motion') && preset.weights.motion > 0
+
+  const fusion = useRef<Fusion | null>(null)
+  useEffect(() => {
+    fusion.current = new Fusion({ weights: preset.weights })
+  }, [preset])
+
+  const feed = (candidate: ScoredCandidate) => {
+    handlers.current.onCandidate?.(candidate)
+    const hit = fusion.current?.push(candidate)
+    if (hit) handlers.current.onHit?.(hit)
+  }
+  const feedRef = useRef(feed)
+  useLayoutEffect(() => {
+    feedRef.current = feed
+  })
 
   useEffect(() => {
-    if (!enabled || preset.weights.audio === 0) return
+    if (!wantAudio) return
     let cancelled = false
     setAudio('starting')
     void (async () => {
@@ -49,35 +82,72 @@ export function useSensors({
           bandHz: preset.bandHz,
           refractoryMs: preset.refractoryMs,
           threshold: k,
-          onCandidate: (c) => handlers.current.onCandidate(c),
+          onCandidate: (c) => feedRef.current(c),
           onLevel: (l) => handlers.current.onLevel?.(l),
         })
         if (cancelled) started.stop()
         else {
-          sensor.current = started
+          audioSensor.current = started
           setAudio('on')
         }
       } catch (error) {
-        if (cancelled) return
-        const name = (error as DOMException).name
-        setAudio(name === 'NotAllowedError' || name === 'SecurityError' ? 'blocked' : 'unavailable')
+        if (!cancelled) setAudio(failure(error))
       }
     })()
     return () => {
       cancelled = true
-      sensor.current?.stop()
-      sensor.current = null
+      audioSensor.current?.stop()
+      audioSensor.current = null
       setAudio('off')
     }
     // The threshold is pushed live through setThreshold, not by restarting.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, preset])
+  }, [wantAudio, preset])
+
+  useEffect(() => {
+    if (!wantMotion) return
+    let cancelled = false
+    let sensor: { stop: () => void } | null = null
+    setMotion('starting')
+    void startMotion({
+      refractoryMs: preset.refractoryMs,
+      onCandidate: (c) => {
+        if (!cancelled) {
+          setMotion('on')
+          feedRef.current(c)
+        }
+      },
+      onSilent: () => {
+        if (!cancelled) setMotion('unavailable')
+      },
+    }).then(
+      (s) => {
+        if (cancelled) s.stop()
+        else {
+          sensor = s
+          setMotion((m) => (m === 'starting' ? 'on' : m))
+        }
+      },
+      (error: unknown) => {
+        if (!cancelled) setMotion(failure(error))
+      },
+    )
+    return () => {
+      cancelled = true
+      sensor?.stop()
+      setMotion('off')
+    }
+  }, [wantMotion, preset])
 
   const active: SensorKind[] = ['manual']
   if (audio === 'on') active.push('audio')
+  if (motion === 'on') active.push('motion')
+  const status: Sensors['status'] = {}
+  if (wantAudio) status.audio = audio
+  if (wantMotion) status.motion = motion
   return {
-    status: enabled ? { audio } : {},
+    status,
     active,
-    setThreshold: (value) => sensor.current?.setThreshold(value),
+    setThreshold: (value: number) => audioSensor.current?.setThreshold(value),
   }
 }

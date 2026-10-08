@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Play } from 'lucide-react'
 import { SPORTS, sport, type SportId } from '../../engine/sports.ts'
 import { primeAudio } from '../../sensors/audio.ts'
+import { primeMotion } from '../../sensors/motion.ts'
 import { Segmented } from '../components/Segmented.tsx'
 import { loadConfig, saveConfig, type LiveConfig } from '../config.ts'
 import { go } from '../router.ts'
@@ -30,7 +31,10 @@ export function Home({ onStart }: Props) {
   }
   const start = () => {
     // Inside the tap: iOS only lets audio start from a user gesture.
-    if (config.input === 'auto') primeAudio()
+    if (config.input === 'auto') {
+      primeAudio()
+      void primeMotion()
+    }
     void saveConfig(config)
     onStart(config)
     go('/live')
@@ -104,7 +108,8 @@ export function Home({ onStart }: Props) {
         />
         {config.input === 'auto' && (
           <p className="text-sm text-chalk-dim">
-            Prop the phone near play. Sound stays on this phone. Tune it in the Lab.
+            Prop the phone near play, or keep it in a pocket. Sound and motion never leave this
+            phone. Tune it in the Lab.
           </p>
         )}
       </section>

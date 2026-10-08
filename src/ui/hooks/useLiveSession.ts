@@ -4,7 +4,7 @@ import type { RallyConfig } from '../../engine/rally.ts'
 import { replay, type MatchView, type Side } from '../../engine/scoring/index.ts'
 import { sport, type SportPreset } from '../../engine/sports.ts'
 import { countHits, summarize } from '../../engine/stats.ts'
-import type { Hit, HitCandidate, Rally, SensorKind } from '../../engine/types.ts'
+import type { Hit, Rally, SensorKind } from '../../engine/types.ts'
 import { buzz } from '../../device/haptics.ts'
 import { listSessions, saveSession, type SessionRecord } from '../../store/db.ts'
 import type { LiveConfig } from '../config.ts'
@@ -33,8 +33,8 @@ export interface LiveSession {
   sensors: SensorKind[]
   dispatch: (action: LiveAction) => void
   tap: () => void
-  /** A hit picked up by a sensor. */
-  sense: (candidate: HitCandidate) => void
+  /** A hit picked up by the sensors (already fused). */
+  sense: (hit: Hit) => void
   undoHit: () => void
   endRally: () => void
   point: (side: Side) => void
@@ -155,12 +155,9 @@ export function useLiveSession(config: LiveConfig, sensors: SensorKind[]): LiveS
     buzz(8)
   }, [])
 
-  const sense = useCallback((candidate: HitCandidate) => {
+  const sense = useCallback((hit: Hit) => {
     setVerdict(null)
-    dispatch({
-      type: 'hit',
-      hit: { t: candidate.t, sources: [candidate.source], confidence: candidate.confidence },
-    })
+    dispatch({ type: 'hit', hit })
   }, [])
 
   const finish = useCallback(async (): Promise<string | null> => {
