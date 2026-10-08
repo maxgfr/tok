@@ -21,11 +21,11 @@ export function countHits(hits: readonly Hit[], soundsPerHit: 1 | 2): number {
   return manual + Math.ceil(sensed / soundsPerHit)
 }
 
-/** Hits per minute across a rally, or null when there is nothing to time. */
+/** Hits per minute across a rally; null under two seconds, where it would be noise. */
 export function tempo(rally: Rally): number | null {
   const first = rally.hits[0]
   const last = rally.hits.at(-1)
-  if (!first || !last || rally.hits.length < 2 || last.t === first.t) return null
+  if (!first || !last || rally.hits.length < 2 || last.t - first.t < 2000) return null
   return ((rally.hits.length - 1) * 60_000) / (last.t - first.t)
 }
 

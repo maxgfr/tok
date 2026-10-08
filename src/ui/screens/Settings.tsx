@@ -165,7 +165,10 @@ export function Settings() {
 
       <footer className="mt-auto text-sm text-chalk-dim">
         tok works offline and never sends anything anywhere.{' '}
-        <a href="https://github.com/maxgfr/tok" className="text-chalk">
+        <a
+          href="https://github.com/maxgfr/tok"
+          className="text-chalk underline decoration-rule underline-offset-4 hover:decoration-chalk"
+        >
           Read the source
         </a>
         .

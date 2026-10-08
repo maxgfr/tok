@@ -40,6 +40,16 @@ describe('tempo', () => {
     expect(tempo(rally(11))).toBe(60)
   })
 
+  test('a rally shorter than two seconds has no meaningful tempo', () => {
+    const quick: Rally = {
+      startedAt: 0,
+      endedAt: 900,
+      hits: hits(4, 'audio', 0, 300),
+      endReason: 'timeout',
+    }
+    expect(tempo(quick)).toBeNull()
+  })
+
   test('a single hit has no tempo', () => {
     expect(tempo(rally(1))).toBeNull()
   })

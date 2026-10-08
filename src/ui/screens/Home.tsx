@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Play } from 'lucide-react'
 import { SPORTS, sport, type SportId } from '../../engine/sports.ts'
+import { primeAudio } from '../../sensors/audio.ts'
 import { Segmented } from '../components/Segmented.tsx'
 import { loadConfig, saveConfig, type LiveConfig } from '../config.ts'
 import { go } from '../router.ts'
@@ -28,6 +29,8 @@ export function Home({ onStart }: Props) {
     update({ sportId: id, mode: next.modes.includes(config.mode) ? config.mode : 'rally' })
   }
   const start = () => {
+    // Inside the tap: iOS only lets audio start from a user gesture.
+    if (config.input === 'auto') primeAudio()
     void saveConfig(config)
     onStart(config)
     go('/live')
@@ -46,13 +49,10 @@ export function Home({ onStart }: Props) {
           Sport
         </h2>
         <ul className="grid grid-cols-2 border-t border-l border-rule">
-          {ordered.map((s, i) => {
+          {ordered.map((s) => {
             const active = s.id === config.sportId
             return (
-              <li
-                key={s.id}
-                className={`border-r border-b border-rule ${i < 2 ? 'col-span-1' : ''}`}
-              >
+              <li key={s.id} className="border-r border-b border-rule">
                 <button
                   type="button"
                   aria-pressed={active}
@@ -61,11 +61,7 @@ export function Home({ onStart }: Props) {
                     active ? 'bg-chalk text-slate' : 'hover:bg-slate-2'
                   }`}
                 >
-                  <span
-                    className={`text-base font-semibold ${i < 2 ? 'figures text-2xl font-extrabold' : ''}`}
-                  >
-                    {s.name}
-                  </span>
+                  <span className="figures text-2xl font-semibold">{s.name}</span>
                 </button>
               </li>
             )
@@ -91,6 +87,26 @@ export function Home({ onStart }: Props) {
             },
           ]}
         />
+      </section>
+
+      <section aria-labelledby="input-h" className="flex flex-col gap-3">
+        <h2 id="input-h" className="text-sm font-semibold text-chalk-dim">
+          Count with
+        </h2>
+        <Segmented
+          label="Count with"
+          value={config.input}
+          onChange={(input) => update({ input })}
+          options={[
+            { value: 'auto', label: 'Auto — listen' },
+            { value: 'manual', label: 'Taps only' },
+          ]}
+        />
+        {config.input === 'auto' && (
+          <p className="text-sm text-chalk-dim">
+            Prop the phone near play. Sound stays on this phone. Tune it in the Lab.
+          </p>
+        )}
       </section>
 
       {config.mode === 'match' && (

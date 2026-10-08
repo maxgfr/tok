@@ -57,7 +57,7 @@ export function RallyBars({ counts, max, label }: Props) {
                 width={w}
                 height={h}
                 rx={Math.min(4, w / 2)}
-                fill={c === best ? 'var(--color-series-best)' : 'var(--color-chalk-faint)'}
+                fill={c === best ? 'var(--color-best)' : 'var(--color-chalk-faint)'}
                 opacity={hover === null || hover === i ? 1 : 0.55}
               />
             </g>

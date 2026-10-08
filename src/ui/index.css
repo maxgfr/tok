@@ -20,9 +20,6 @@
   --color-side-a: #6fc3e8;
   --color-side-b: #f28c7a;
   --color-live: #8fe3a0;
-  /* Chart series, validated for CVD and the dark band against the slate. */
-  --color-series-best: #b08c1c;
-  --color-series-avg: #1f9c8c;
 
   --font-figure: 'Barlow Condensed', ui-sans-serif, system-ui, sans-serif;
   --font-sans:

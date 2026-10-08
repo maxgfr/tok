@@ -16,7 +16,7 @@ export interface LiveConfig {
 export const DEFAULT_CONFIG: LiveConfig = {
   sportId: 'table-tennis',
   mode: 'rally',
-  input: 'manual',
+  input: 'auto',
   names: { A: 'Me', B: 'You' },
   firstServer: 'A',
 }

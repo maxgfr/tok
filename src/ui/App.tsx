@@ -4,6 +4,7 @@ import type { LiveConfig } from './config.ts'
 import { useRoute } from './router.ts'
 import { History } from './screens/History.tsx'
 import { Home } from './screens/Home.tsx'
+import { Lab } from './screens/Lab.tsx'
 import { Live } from './screens/Live.tsx'
 import { SessionDetail } from './screens/SessionDetail.tsx'
 import { Settings } from './screens/Settings.tsx'
@@ -25,7 +26,8 @@ export function App() {
         {route.name === 'history' && <History />}
         {route.name === 'session' && <SessionDetail id={route.id} />}
         {route.name === 'settings' && <Settings />}
-        {(route.name === 'lab' || route.name === 'replay') && <Home onStart={setConfig} />}
+        {route.name === 'lab' && <Lab />}
+        {route.name === 'replay' && <Home onStart={setConfig} />}
       </div>
       <BottomNav route={route} />
     </div>

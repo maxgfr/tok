@@ -3,7 +3,7 @@ import type { DayPoint } from '../../engine/stats.ts'
 
 const W = 600
 const H = 180
-const PAD = { top: 12, right: 12, bottom: 22, left: 34 }
+const PAD = { top: 12, right: 12, bottom: 12, left: 12 }
 
 const fmtDay = (day: string) => {
   const [, m, d] = day.split('-')
@@ -12,7 +12,8 @@ const fmtDay = (day: string) => {
 
 /**
  * Best and average rally per day on one fixed scale (0 → all-time best), so a
- * good day looks good next to every other day.
+ * good day looks good next to every other day. Best wears the record yellow;
+ * the average is chalk, dashed, so the two never rely on colour alone.
  */
 export function DayChart({ points }: { points: DayPoint[] }) {
   const [hover, setHover] = useState<number | null>(null)
@@ -41,10 +42,11 @@ export function DayChart({ points }: { points: DayPoint[] }) {
       <figcaption className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-sm text-chalk-dim">
         <span className="flex items-center gap-4">
           <span className="flex items-center gap-1.5">
-            <span className="h-0.5 w-4 rounded bg-series-best" aria-hidden="true" /> Best rally
+            <span className="h-0.5 w-4 rounded bg-best" aria-hidden="true" /> Best rally
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="h-0.5 w-4 rounded bg-series-avg" aria-hidden="true" /> Average
+            <span className="w-4 border-t-2 border-dashed border-chalk-dim" aria-hidden="true" />{' '}
+            Average
           </span>
         </span>
         <span className="figures text-base text-chalk" aria-live="polite">
@@ -53,83 +55,92 @@ export function DayChart({ points }: { points: DayPoint[] }) {
             : ''}
         </span>
       </figcaption>
-      <svg
-        viewBox={`0 0 ${W} ${H}`}
-        className="h-auto w-full touch-none"
-        aria-hidden="true"
-        onPointerMove={onMove}
-        onPointerDown={onMove}
-        onPointerLeave={() => setHover(null)}
-      >
-        {ticks.map((t) => (
-          <g key={t}>
+      <div className="flex gap-2">
+        {/* Labels in CSS pixels: they must not shrink with the drawing. */}
+        <div
+          className="figures relative w-8 shrink-0 text-right text-sm text-chalk-dim"
+          aria-hidden="true"
+        >
+          {ticks.map((t) => (
+            <span
+              key={t}
+              className="absolute right-0 -translate-y-1/2"
+              style={{ top: `${(y(t) / H) * 100}%` }}
+            >
+              {t}
+            </span>
+          ))}
+        </div>
+        <svg
+          viewBox={`0 0 ${W} ${H}`}
+          className="h-auto min-w-0 flex-1 touch-none"
+          aria-hidden="true"
+          onPointerMove={onMove}
+          onPointerDown={onMove}
+          onPointerLeave={() => setHover(null)}
+        >
+          {ticks.map((t) => (
             <line
-              x1={PAD.left}
-              x2={W - PAD.right}
+              key={t}
+              x1={0}
+              x2={W}
               y1={y(t)}
               y2={y(t)}
               stroke="var(--color-rule)"
               strokeWidth={1}
             />
-            <text
-              x={PAD.left - 6}
-              y={y(t) + 4}
-              textAnchor="end"
-              className="figures fill-chalk-dim text-[12px]"
-            >
-              {t}
-            </text>
-          </g>
-        ))}
-        <text x={x(0)} y={H - 4} textAnchor="start" className="figures fill-chalk-dim text-[12px]">
-          {fmtDay(points[0]!.day)}
-        </text>
-        {last > 0 && (
-          <text
-            x={x(last)}
-            y={H - 4}
-            textAnchor="end"
-            className="figures fill-chalk-dim text-[12px]"
-          >
-            {fmtDay(points[last]!.day)}
-          </text>
-        )}
-        {hover !== null && (
-          <line
-            x1={x(hover)}
-            x2={x(hover)}
-            y1={PAD.top}
-            y2={PAD.top + ih}
-            stroke="var(--color-chalk-faint)"
-            strokeWidth={1}
-          />
-        )}
-        <path
-          d={path('average')}
-          fill="none"
-          stroke="var(--color-series-avg)"
-          strokeWidth={2}
-          strokeLinejoin="round"
-        />
-        <path
-          d={path('best')}
-          fill="none"
-          stroke="var(--color-series-best)"
-          strokeWidth={2}
-          strokeLinejoin="round"
-        />
-        {points.map((p, i) => (
-          <circle
-            key={p.day}
-            cx={x(i)}
-            cy={y(p.best)}
-            r={hover === i ? 5 : 4}
-            fill="var(--color-series-best)"
-            stroke="var(--color-slate)"
+          ))}
+          {hover !== null && (
+            <line
+              x1={x(hover)}
+              x2={x(hover)}
+              y1={PAD.top}
+              y2={PAD.top + ih}
+              stroke="var(--color-chalk-faint)"
+              strokeWidth={1}
+            />
+          )}
+          <path
+            d={path('average')}
+            fill="none"
+            stroke="var(--color-chalk-dim)"
             strokeWidth={2}
+            strokeDasharray="6 5"
+            strokeLinejoin="round"
           />
-        ))}
-      </svg>
+          <path
+            d={path('best')}
+            fill="none"
+            stroke="var(--color-best)"
+            strokeWidth={2}
+            strokeLinejoin="round"
+          />
+          {points.map((p, i) => (
+            <g key={p.day}>
+              <circle
+                cx={x(i)}
+                cy={y(p.average)}
+                r={3.5}
+                fill="var(--color-chalk-dim)"
+                stroke="var(--color-slate)"
+                strokeWidth={2}
+              />
+              <circle
+                cx={x(i)}
+                cy={y(p.best)}
+                r={hover === i ? 5.5 : 4.5}
+                fill="var(--color-best)"
+                stroke="var(--color-slate)"
+                strokeWidth={2}
+              />
+            </g>
+          ))}
+        </svg>
+      </div>
+      <div className="figures flex justify-between pl-10 text-sm text-chalk-dim" aria-hidden="true">
+        <span>{fmtDay(points[0]!.day)}</span>
+        {last > 0 && <span>{fmtDay(points[last]!.day)}</span>}
+      </div>
       <p className="sr-only">
         Best rally per day: {points.map((p) => `${fmtDay(p.day)} ${p.best}`).join(', ')}
       </p>
