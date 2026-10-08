@@ -15,7 +15,7 @@ test('the live counter counts every hit of the recording on its own', async ({ p
   await expect(page.getByText('Listening')).toBeVisible({ timeout: 10_000 })
   // The rally ends on its own after the recording falls silent.
   await expect(page.getByText(new RegExp(`New record — ${sport.hits}!`))).toBeVisible({
-    timeout: 20_000,
+    timeout: 30_000,
   })
   await expect(
     page.getByRole('button', { name: `Add a hit. Current rally: ${sport.hits}` }),

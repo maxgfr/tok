@@ -64,3 +64,11 @@ jobs:
 
       - name: Count hits from reference recordings
         run: pnpm e2e
+
+      - name: Keep the failure trace
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-results
+          path: test-results
+          retention-days: 7

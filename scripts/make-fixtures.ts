@@ -30,23 +30,25 @@ function wav(samples: Float32Array): Buffer {
   return Buffer.concat([header, data])
 }
 
+// Both start after a 3 s lead-in: the mic opens before the detector is attached.
+
 // Beach rackets: 10 hits, 0.55 s apart, over wind-and-waves rumble.
-const rackets = steady(10, 1, 0.55, { freq: 2600, gain: 0.45, decayMs: 30 })
+const rackets = steady(10, 3, 0.55, { freq: 2600, gain: 0.45, decayMs: 30 })
 writeFileSync(
   'fixtures/beach-rackets.wav',
-  wav(synth({ sampleRate: SR, seconds: 9, toks: rackets, noise: 0.004, rumble: 0.05, seed: 7 })),
+  wav(synth({ sampleRate: SR, seconds: 11, toks: rackets, noise: 0.004, rumble: 0.05, seed: 7 })),
 )
 
 // Table tennis: 10 hits, each a paddle "tok" then a table bounce.
 const table: Tok[] = []
 for (let i = 0; i < 10; i += 1) {
-  const at = 1 + i * 0.42
+  const at = 3 + i * 0.42
   table.push({ at, freq: 3400, gain: 0.4, decayMs: 14 })
   table.push({ at: at + 0.21, freq: 2100, gain: 0.3, decayMs: 12 })
 }
 writeFileSync(
   'fixtures/table-tennis.wav',
-  wav(synth({ sampleRate: SR, seconds: 8, toks: table, noise: 0.003, seed: 11 })),
+  wav(synth({ sampleRate: SR, seconds: 10, toks: table, noise: 0.003, seed: 11 })),
 )
 
 console.log('fixtures written: beach-rackets.wav (10 hits), table-tennis.wav (10 hits, 20 sounds)')
