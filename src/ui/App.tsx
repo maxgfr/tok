@@ -3,7 +3,7 @@ import { BottomNav } from './components/BottomNav.tsx'
 import { ScreenBoundary } from './components/ScreenBoundary.tsx'
 import { UpdatePrompt } from './components/UpdatePrompt.tsx'
 import type { LiveConfig } from './config.ts'
-import { useRoute } from './router.ts'
+import { go, useRoute } from './router.ts'
 import { Home } from './screens/Home.tsx'
 
 // Home opens the app; every other screen loads when first visited.
@@ -28,9 +28,14 @@ export function App() {
     if (route.name === 'home') void loadLive()
   }, [route.name])
 
-  if (route.name === 'live') {
-    // A reload on the live screen goes back to setup rather than guessing.
-    if (!config) return <Home onStart={setConfig} />
+  // A reload (or a link) on the live screen goes back to setup rather than guessing.
+  const lostSession = route.name === 'live' && !config
+  useEffect(() => {
+    if (lostSession) go('/', { replace: true })
+  }, [lostSession])
+  if (lostSession) return null
+
+  if (route.name === 'live' && config) {
     return (
       <ScreenBoundary>
         <Suspense fallback={<div className="fixed inset-0 bg-slate" />}>

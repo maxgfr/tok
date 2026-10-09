@@ -62,6 +62,14 @@ test('restart puts the rally back at 0 and records nothing', async () => {
   expect(await listSessions()).toEqual([])
 })
 
+test('opening the live screen with no session set up lands on setup, with the app nav', async () => {
+  window.location.hash = '#/live'
+  render(<App />)
+  expect(await screen.findByRole('navigation', { name: 'Main' })).toBeTruthy()
+  expect(screen.getByRole('button', { name: /start table tennis/i })).toBeTruthy()
+  await waitFor(() => expect(window.location.hash).toBe('#/'))
+})
+
 test('match mode gives points to the tapped side', async () => {
   const user = userEvent.setup()
   render(<App />)
