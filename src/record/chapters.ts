@@ -1,7 +1,7 @@
 // Pure helpers for recordings: where each rally sits in the video, and which
 // container the browser can write.
 
-import { countHits } from '../engine/stats.ts'
+import { rallyCount } from '../engine/stats.ts'
 import type { Rally } from '../engine/types.ts'
 
 export interface Chapter {
@@ -23,7 +23,7 @@ export function chapters(
   soundsPerHit: 1 | 2,
 ): Chapter[] {
   const list = rallies
-    .map((r, index) => ({ r, index, count: countHits(r.hits, soundsPerHit) }))
+    .map((r, index) => ({ r, index, count: rallyCount(r, soundsPerHit) }))
     .filter(({ r, count }) => count > 0 && r.endedAt >= videoStartedAt)
     .map(({ r, index, count }) => ({
       index,

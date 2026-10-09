@@ -28,7 +28,7 @@ test('the sensitivity set during a session is kept for the sport', async ({ page
 
   const startSession = async () => {
     await page.getByRole('button', { name: 'Beach rackets', exact: true }).click()
-    await page.getByText('Auto — listen').click()
+    await page.getByText('Auto · experimental').click()
     await page.getByRole('button', { name: /^start/i }).click()
     await expect(page.getByText('Listening')).toBeVisible({ timeout: 10_000 })
   }

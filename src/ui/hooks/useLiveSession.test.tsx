@@ -1,7 +1,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, expect, test, vi } from 'vitest'
 import type { SensorKind } from '../../engine/types.ts'
-import { clearAll, getSession, type VideoRef } from '../../store/db.ts'
+import { clearAll, getSession, setSetting, type VideoRef } from '../../store/db.ts'
 import { DEFAULT_CONFIG } from '../config.ts'
 import { useLiveSession } from './useLiveSession.ts'
 
@@ -52,24 +52,18 @@ test('renders after finish never overwrite the final save', async () => {
   })
 })
 
-test('a sensor hit stamped in the future cannot keep a rally open forever', async () => {
-  vi.useFakeTimers({ shouldAdvanceTime: true, toFake: TIMERS })
-  try {
-    const config = { ...DEFAULT_CONFIG, input: 'auto' as const }
-    const { result } = renderHook(() => useLiveSession(config, ['audio']))
-    const future = Date.now() + 60_000
-    act(() => {
-      result.current.sense({ t: Date.now(), sources: ['audio'], confidence: 1 })
-      result.current.sense({ t: future, sources: ['audio'], confidence: 1 })
-    })
-    // Table tennis times out after 1.5 s of silence.
-    await act(async () => {
-      vi.advanceTimersByTime(3000)
-    })
-    expect(result.current.inRally).toBe(false)
-  } finally {
-    vi.useRealTimers()
-  }
+test('a sensor hit stamped in the future is stored at the present', async () => {
+  const config = { ...DEFAULT_CONFIG, input: 'auto' as const }
+  const { result } = renderHook(() => useLiveSession(config, ['audio']))
+  const before = Date.now()
+  act(() => {
+    result.current.sense({ t: before - 500, sources: ['audio'], confidence: 1 })
+    result.current.sense({ t: before + 60_000, sources: ['audio'], confidence: 1 })
+  })
+  act(() => result.current.endRally())
+  const hits = result.current.rallies[0]?.hits ?? []
+  expect(hits).toHaveLength(2)
+  expect(hits[1]!.t).toBeLessThanOrEqual(Date.now())
 })
 
 test('an idle session does not re-render', async () => {
@@ -96,22 +90,48 @@ test('an idle session does not re-render', async () => {
   }
 })
 
-test('a rally still times out on its own', async () => {
+test('a rally waits for End rally, however long the silence', async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true, toFake: TIMERS })
+  try {
+    const config = { ...DEFAULT_CONFIG, input: 'auto' as const }
+    const { result } = renderHook(() => useLiveSession(config, ['audio']))
+    act(() => {
+      result.current.sense({ t: Date.now(), sources: ['audio'], confidence: 1 })
+      result.current.sense({ t: Date.now() + 300, sources: ['audio'], confidence: 1 })
+    })
+    await act(async () => {
+      vi.advanceTimersByTime(60_000)
+    })
+    expect(result.current.inRally).toBe(true)
+    expect(result.current.rallies).toHaveLength(0)
+    act(() => result.current.endRally())
+    expect(result.current.inRally).toBe(false)
+    expect(result.current.rallies).toHaveLength(1)
+  } finally {
+    vi.useRealTimers()
+  }
+})
+
+test('with "end rallies on their own" set, a silence that long ends the rally', async () => {
+  await setSetting('autoEnd', 3)
   vi.useFakeTimers({ shouldAdvanceTime: true, toFake: TIMERS })
   try {
     const config = { ...DEFAULT_CONFIG, input: 'manual' as const }
     const { result } = renderHook(() => useLiveSession(config, ['manual']))
+    // Let the setting load.
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 50))
+    })
     act(() => {
       result.current.tap()
       result.current.tap()
     })
-    expect(result.current.inRally).toBe(true)
     await act(async () => {
-      vi.advanceTimersByTime(1000)
+      vi.advanceTimersByTime(2000)
     })
     expect(result.current.inRally).toBe(true)
     await act(async () => {
-      vi.advanceTimersByTime(1000)
+      vi.advanceTimersByTime(1500)
     })
     expect(result.current.inRally).toBe(false)
     expect(result.current.rallies).toHaveLength(1)

@@ -15,7 +15,7 @@ test('ball tracking starts on the camera and nothing leaves the device', async (
 
   await page.goto('./')
   await page.getByRole('button', { name: 'Volleyball', exact: true }).click()
-  await page.getByText('Auto — listen').click()
+  await page.getByText('Auto · experimental').click()
   await page.getByRole('button', { name: /^start/i }).click()
   await page.getByRole('button', { name: 'Film the session' }).click()
 

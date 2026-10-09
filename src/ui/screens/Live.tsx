@@ -1,5 +1,16 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { Minus, Moon, RotateCcw, Square, Undo2, Video, VideoOff, X } from 'lucide-react'
+import {
+  AudioWaveform,
+  Hand,
+  Lock,
+  Minus,
+  RotateCcw,
+  Square,
+  Undo2,
+  Video,
+  VideoOff,
+  X,
+} from 'lucide-react'
 import type { Side } from '../../engine/scoring/index.ts'
 import type { Hit } from '../../engine/types.ts'
 import { useWakeLock } from '../../device/wakeLock.ts'
@@ -11,7 +22,8 @@ import { PocketMode } from '../components/PocketMode.tsx'
 import { SensitivityPanel } from '../components/SensitivityPanel.tsx'
 import { SensorChips } from '../components/SensorChips.tsx'
 import { Tally } from '../components/Tally.tsx'
-import type { LiveConfig } from '../config.ts'
+import { saveConfig, type InputMode, type LiveConfig } from '../config.ts'
+import { loadMicDevice } from '../micDevice.ts'
 import { useLiveSession, type LiveSession } from '../hooks/useLiveSession.ts'
 import { useCamera } from '../hooks/useCamera.ts'
 import { useVision } from '../hooks/useVision.ts'
@@ -20,15 +32,33 @@ import { useLatest } from '../hooks/useLatest.ts'
 import { useSensors } from '../hooks/useSensors.ts'
 import type { OverlayState } from '../../record/overlay.ts'
 import { deleteVideo } from '../../record/videoStore.ts'
+import { primeAudio, primeMotion } from '../../sensors/prime.ts'
 import { releaseVisionWorker } from '../../sensors/vision.ts'
 import { go } from '../router.ts'
 
-export function Live({ config }: { config: LiveConfig }) {
+export function Live({ config: initial }: { config: LiveConfig }) {
+  // The counting mode can change mid-session; everything else is fixed at Start.
+  const [input, setInput] = useState<InputMode>(initial.input)
+  const config = useMemo(() => ({ ...initial, input }), [initial, input])
+  const switchInput = () => {
+    const next: InputMode = input === 'auto' ? 'manual' : 'auto'
+    if (next === 'auto') {
+      // Inside the tap: iOS only starts audio and motion from a user gesture.
+      primeAudio()
+      void primeMotion()
+    }
+    setInput(next)
+    void saveConfig({ ...initial, input: next })
+  }
   const preset = sport(config.sportId)
   const [confirmEnd, setConfirmEnd] = useState(false)
   const [pocket, setPocket] = useState(false)
   const [cameraOn, setCameraOn] = useState(false)
   const [panelOpen, setPanelOpen] = useState(false)
+  const [micDevice, setMicDevice] = useState('')
+  useEffect(() => {
+    if (panelOpen) void loadMicDevice().then(setMicDevice)
+  }, [panelOpen])
   const [rejected, setRejected] = useState(0)
   // What the mic hears, for the sensitivity panel's trace.
   const levels = useRef<TracePoint[]>([])
@@ -91,7 +121,6 @@ export function Live({ config }: { config: LiveConfig }) {
     video: cameraVideo,
     preset,
     onCandidate: sensors.feed,
-    onGround: (t) => session.dispatch({ type: 'end', t, reason: 'ground' }),
   })
   // Each rally opens on a key frame: replays and clips can cut exactly there.
   useEffect(() => {
@@ -199,6 +228,27 @@ export function Live({ config }: { config: LiveConfig }) {
             />
             <button
               type="button"
+              onClick={switchInput}
+              title={
+                input === 'auto' ? 'Auto (experimental) — tap for Manual' : 'Manual — tap for Auto'
+              }
+              aria-label={
+                input === 'auto'
+                  ? 'Counting with sensors. Switch to Manual'
+                  : 'Counting by hand. Switch to Auto'
+              }
+              className={`grid size-11 place-items-center rounded-lg ${
+                input === 'auto' ? 'text-chalk' : 'text-chalk-dim hover:text-chalk'
+              }`}
+            >
+              {input === 'auto' ? (
+                <AudioWaveform size={22} aria-hidden="true" />
+              ) : (
+                <Hand size={22} aria-hidden="true" />
+              )}
+            </button>
+            <button
+              type="button"
               onClick={() => setCameraOn((on) => !on)}
               aria-pressed={cameraOn}
               aria-label={cameraOn ? 'Stop the camera' : 'Film the session'}
@@ -221,10 +271,11 @@ export function Live({ config }: { config: LiveConfig }) {
             <button
               type="button"
               onClick={() => setPocket(true)}
-              aria-label="Pocket mode: black screen, touches locked"
+              aria-label="Lock the screen"
+              title="Lock the screen: black, touches ignored"
               className="grid size-11 place-items-center rounded-lg text-chalk-dim hover:text-chalk"
             >
-              <Moon size={22} aria-hidden="true" />
+              <Lock size={22} aria-hidden="true" />
             </button>
           </>
         )}
@@ -247,6 +298,15 @@ export function Live({ config }: { config: LiveConfig }) {
           onVoiceFilter={(on) => void sens.setVoiceFilter(on)}
           onReset={() => void sens.reset()}
           onClose={() => setPanelOpen(false)}
+          micDevice={micDevice}
+          onMicDevice={(id) => {
+            setMicDevice(id)
+            void sensors.setMicDevice(id)
+          }}
+          onManual={() => {
+            setPanelOpen(false)
+            switchInput()
+          }}
         />
       )}
     </div>

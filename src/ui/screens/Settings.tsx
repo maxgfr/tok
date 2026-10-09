@@ -10,9 +10,19 @@ import {
 import { clearVideos } from '../../record/videoStore.ts'
 import { SPORTS, type SportId } from '../../engine/sports.ts'
 import { canSpeak } from '../../device/speech.ts'
+import { MicPicker } from '../components/MicPicker.tsx'
 import { Toggle } from '../components/Toggle.tsx'
-import { loadCoach, loadGoal, saveCoach, saveGoal, type CoachSettings } from '../coach.ts'
+import {
+  loadAutoEnd,
+  loadCoach,
+  loadGoal,
+  saveAutoEnd,
+  saveCoach,
+  saveGoal,
+  type CoachSettings,
+} from '../coach.ts'
 import { fmtBytes, plural } from '../format.ts'
+import { loadMicDevice, saveMicDevice } from '../micDevice.ts'
 
 export function Settings() {
   const [estimate, setEstimate] = useState<{ usage: number; quota: number } | null>(null)
@@ -24,6 +34,12 @@ export function Settings() {
   const [goalSport, setGoalSport] = useState<SportId>('table-tennis')
   const [goal, setGoal] = useState(0)
   const [voiceAvailable, setVoiceAvailable] = useState(canSpeak)
+  const [mic, setMic] = useState('')
+  const [autoEnd, setAutoEnd] = useState(0)
+  useEffect(() => {
+    void loadMicDevice().then(setMic)
+    void loadAutoEnd().then(setAutoEnd)
+  }, [])
   useEffect(() => {
     // Voices arrive asynchronously in some browsers.
     const synth = globalThis.speechSynthesis
@@ -93,6 +109,49 @@ export function Settings() {
     <main className="safe-x safe-top mx-auto flex w-full max-w-xl flex-1 flex-col gap-8 pb-6">
       <h1 className="figures pt-2 text-5xl font-extrabold">Settings</h1>
 
+      <section aria-labelledby="counting-h" className="flex flex-col gap-3">
+        <h2 id="counting-h" className="text-xl font-semibold">
+          Counting
+        </h2>
+        <Toggle
+          label="Sounds"
+          hint="A click for each hit, a chime when a rally ends. Auto never counts them."
+          checked={coach?.sounds ?? true}
+          disabled={!coach}
+          onChange={(sounds) => updateCoach({ sounds })}
+        />
+        <div className="flex flex-col gap-1">
+          <label htmlFor="auto-end" className="font-semibold">
+            End a rally on its own
+          </label>
+          <select
+            id="auto-end"
+            value={autoEnd}
+            onChange={(e) => {
+              const seconds = Number(e.target.value)
+              setAutoEnd(seconds)
+              void saveAutoEnd(seconds)
+            }}
+            className="min-h-12 rounded-lg border border-rule bg-slate-2 px-3 text-lg text-chalk"
+          >
+            <option value={0}>Never — I end each rally</option>
+            <option value={3}>After 3 s without a hit</option>
+            <option value={5}>After 5 s without a hit</option>
+            <option value={8}>After 8 s without a hit</option>
+          </select>
+          <span className="text-sm text-chalk-dim">
+            End rally, a point, or the earbuds always end it too.
+          </span>
+        </div>
+        <MicPicker
+          value={mic}
+          onChange={(id) => {
+            setMic(id)
+            void saveMicDevice(id)
+          }}
+        />
+      </section>
+
       <section aria-labelledby="coach-h" className="flex flex-col gap-3">
         <h2 id="coach-h" className="text-xl font-semibold">
           Coach
@@ -110,7 +169,7 @@ export function Settings() {
         />
         <Toggle
           label="Earbuds as a clicker"
-          hint="Experimental. Rally: play = +1, next = end rally, previous = undo. Match: next = point A, previous = point B, play = undo."
+          hint="Count with your hands free. Rally: play = +1, next = end rally, previous = undo. Match: next = point A, previous = point B, play = undo. Works with most Bluetooth earbuds and remotes; a few browsers keep the buttons to themselves."
           checked={!!coach?.remote}
           disabled={!coach}
           onChange={(remote) => updateCoach({ remote })}

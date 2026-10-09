@@ -30,3 +30,43 @@ test('without an on-device voice, spoken calls stay off', async () => {
   const toggle = await screen.findByRole('checkbox', { name: /call it out loud/i })
   expect((toggle as HTMLInputElement).disabled).toBe(true)
 })
+
+test('the microphone can be chosen, once its name is known', async () => {
+  let allowed = false
+  Object.defineProperty(navigator, 'mediaDevices', {
+    configurable: true,
+    value: {
+      enumerateDevices: async () => [
+        { kind: 'audioinput', deviceId: 'built-in', label: allowed ? 'iPhone Microphone' : '' },
+        { kind: 'audioinput', deviceId: 'headset', label: allowed ? 'AirPods' : '' },
+      ],
+      getUserMedia: async () => {
+        allowed = true
+        return { getTracks: () => [] }
+      },
+    },
+  })
+  const user = userEvent.setup()
+  render(<Settings />)
+  await user.click(await screen.findByRole('button', { name: 'Show microphone names' }))
+  await user.selectOptions(await screen.findByLabelText('Microphone'), 'AirPods')
+  await expect.poll(() => getSetting('micDevice', '')).toBe('headset')
+})
+
+test('sounds are on until turned off', async () => {
+  const user = userEvent.setup()
+  render(<Settings />)
+  const toggle = await screen.findByRole('checkbox', { name: /^sounds/i })
+  await expect.poll(() => (toggle as HTMLInputElement).checked).toBe(true)
+  await user.click(toggle)
+  await expect.poll(() => getSetting('sounds', true)).toBe(false)
+})
+
+test('rallies end only by hand until an automatic end is chosen', async () => {
+  const user = userEvent.setup()
+  render(<Settings />)
+  const select = await screen.findByLabelText('End a rally on its own')
+  expect((select as HTMLSelectElement).value).toBe('0')
+  await user.selectOptions(select, '5')
+  await expect.poll(() => getSetting('autoEnd', 0)).toBe(5)
+})

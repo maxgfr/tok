@@ -4,7 +4,9 @@ import type { AutoSensor, SportPreset } from '../../engine/sports.ts'
 import type { Hit, HitCandidate, SensorKind } from '../../engine/types.ts'
 import { startAudio, type AudioSensor, type TimedLevel } from '../../sensors/audio.ts'
 import { startMotion } from '../../sensors/motion.ts'
+import { isSounding } from '../../device/sounds.ts'
 import { isSpeaking } from '../../device/speech.ts'
+import { loadMicDevice, saveMicDevice } from '../micDevice.ts'
 import { loadThreshold, loadVoiceFilter } from '../thresholds.ts'
 import { failure } from './sensorStatus.ts'
 import { useLatest } from './useLatest.ts'
@@ -34,6 +36,8 @@ export function useSensors({ enabled, preset, onHit, onLevel }: Options) {
   const [motion, setMotion] = useState<SensorStatus>('off')
   const handlers = useLatest({ onHit, onLevel })
   const audioSensor = useRef<AudioSensor | null>(null)
+  // Bumped when the player picks another microphone: the mic restarts on it.
+  const [micChanges, setMicChanges] = useState(0)
   // Settings changed before the mic is up are applied when it starts.
   const pushed = useRef<{ threshold?: number; voiceFilter?: boolean; levels?: boolean }>({})
   useEffect(
@@ -53,8 +57,8 @@ export function useSensors({ enabled, preset, onHit, onLevel }: Options) {
   }, [preset])
 
   const feed = (candidate: ScoredCandidate) => {
-    // tok's own voice is not a hit.
-    if (candidate.source === 'audio' && isSpeaking()) return
+    // tok's own voice and sounds are not hits.
+    if (candidate.source === 'audio' && (isSpeaking() || isSounding())) return
     const hit = fusion.current?.push(candidate)
     if (hit) handlers.current.onHit?.(hit)
   }
@@ -70,7 +74,9 @@ export function useSensors({ enabled, preset, onHit, onLevel }: Options) {
           loadThreshold(preset.id),
           loadVoiceFilter(preset.id),
         ])
+        const deviceId = await loadMicDevice()
         const started = await startAudio({
+          deviceId,
           bandHz: preset.bandHz,
           refractoryMs: preset.refractoryMs,
           threshold: pushed.current.threshold ?? storedThreshold,
@@ -94,9 +100,10 @@ export function useSensors({ enabled, preset, onHit, onLevel }: Options) {
       audioSensor.current = null
       setAudio('off')
     }
-    // The threshold is pushed live through setThreshold, not by restarting.
+    // The threshold is pushed live through setThreshold, not by restarting;
+    // another microphone does restart it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [wantAudio, preset])
+  }, [wantAudio, preset, micChanges])
 
   useEffect(() => {
     if (!wantMotion) return
@@ -148,6 +155,11 @@ export function useSensors({ enabled, preset, onHit, onLevel }: Options) {
       setLevels: (on: boolean) => {
         pushed.current.levels = on
         audioSensor.current?.setLevels(on)
+      },
+      /** Listens with another microphone from now on ('' = system default). */
+      setMicDevice: async (id: string) => {
+        await saveMicDevice(id)
+        setMicChanges((n) => n + 1)
       },
       audioTrack: () => audioSensor.current?.track ?? null,
       /** Feeds a candidate from another sensor (vision) into the same fusion. */

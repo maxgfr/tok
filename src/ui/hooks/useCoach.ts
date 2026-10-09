@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { matchPhrase, rallyPhrase } from '../../device/phrases.ts'
 import { startRemote } from '../../device/remote.ts'
+import { hitSound, rallyEndSound } from '../../device/sounds.ts'
 import { speak } from '../../device/speech.ts'
 import { matchPoints } from '../../engine/live.ts'
 import { loadCoach, type CoachSettings } from '../coach.ts'
@@ -18,7 +19,20 @@ export function useCoach(config: LiveConfig, session: LiveSession): void {
   const latest = useLatest(session)
 
   // Rally mode: call each finished rally.
-  const { verdict } = session
+  const { verdict, count, inRally } = session
+
+  // Sounds: a click for each hit counted, a chime when a rally ends.
+  const heard = useRef({ count, inRally })
+  useEffect(() => {
+    const before = heard.current
+    heard.current = { count, inRally }
+    if (coach?.sounds && inRally && (!before.inRally || count > before.count)) hitSound()
+  }, [count, inRally, coach?.sounds])
+  useEffect(() => {
+    if (!coach?.sounds || !verdict) return
+    rallyEndSound(verdict.record || verdict.todayBest || !!verdict.goal)
+  }, [verdict, coach?.sounds])
+
   useEffect(() => {
     if (!coach?.voice || !verdict || config.mode !== 'rally') return
     speak(rallyPhrase(verdict, latest.current.todayBest))

@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
-import { ArrowLeft, Film, Trash2 } from 'lucide-react'
+import { ArrowLeft, Film, Pencil, Trash2 } from 'lucide-react'
 import { matchPoints } from '../../engine/live.ts'
 import { replay } from '../../engine/scoring/index.ts'
 import { sport } from '../../engine/sports.ts'
-import { countHits, tempo } from '../../engine/stats.ts'
+import { rallyCount, tempo } from '../../engine/stats.ts'
 import { deleteVideo } from '../../record/videoStore.ts'
-import { deleteSession, getSession, type SessionRecord } from '../../store/db.ts'
+import { deleteSession, getSession, saveSession, type SessionRecord } from '../../store/db.ts'
 import { RallyBars } from '../components/RallyBars.tsx'
 import { capital, fmtDate, fmtDuration, fmtTime, plural } from '../format.ts'
 import { go } from '../router.ts'
@@ -13,6 +13,8 @@ import { go } from '../router.ts'
 export function SessionDetail({ id }: { id: string }) {
   const [session, setSession] = useState<SessionRecord | null | undefined>(undefined)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  // The rally being corrected, and the count typed so far.
+  const [editing, setEditing] = useState<{ index: number; draft: string } | null>(null)
 
   useEffect(() => {
     void getSession(id).then((s) => setSession(s ?? null))
@@ -32,7 +34,7 @@ export function SessionDetail({ id }: { id: string }) {
   }
 
   const preset = sport(session.sportId)
-  const counts = session.rallies.map((r) => countHits(r.hits, preset.soundsPerHit))
+  const counts = session.rallies.map((r) => rallyCount(r, preset.soundsPerHit))
   const hitRallies = session.rallies.filter((r) => r.hits.length > 0)
   const best = Math.max(0, ...counts)
   const total = counts.reduce((a, b) => a + b, 0)
@@ -42,6 +44,17 @@ export function SessionDetail({ id }: { id: string }) {
     session.match && preset.scoring
       ? replay(session.match.rules, matchPoints(session.rallies), session.match.firstServer)
       : null
+
+  // Detection is experimental: the player has the last word on every rally.
+  const keep = async (rallies: SessionRecord['rallies']) => {
+    const next = { ...session, rallies }
+    await saveSession(next)
+    setSession(next)
+    setEditing(null)
+  }
+  const correct = (index: number, count: number) =>
+    keep(session.rallies.map((r, i) => (i === index ? { ...r, count } : r)))
+  const removeRally = (index: number) => keep(session.rallies.filter((_, i) => i !== index))
 
   const remove = async () => {
     await Promise.all((session.videos ?? []).map(deleteVideo))
@@ -130,12 +143,16 @@ export function SessionDetail({ id }: { id: string }) {
                   Point
                 </th>
               )}
+              <th scope="col" className="w-11">
+                <span className="sr-only">Correct</span>
+              </th>
             </tr>
           </thead>
           <tbody className="figures text-xl">
             {session.rallies.map((r, i) => {
               const pace = tempo(r)
-              return (
+              const columns = match ? 6 : 5
+              return [
                 <tr key={r.startedAt} className="border-b border-rule">
                   <td className="py-2 pr-2 text-chalk-dim">{i + 1}</td>
                   <td
@@ -156,8 +173,62 @@ export function SessionDetail({ id }: { id: string }) {
                       {r.winner ? session.match.names[r.winner] : '—'}
                     </td>
                   )}
-                </tr>
-              )
+                  <td className="text-right">
+                    <button
+                      type="button"
+                      onClick={() => setEditing({ index: i, draft: String(counts[i]) })}
+                      aria-label={`Correct rally ${i + 1}`}
+                      className="grid size-11 place-items-center rounded-lg text-chalk-dim hover:text-chalk"
+                    >
+                      <Pencil size={18} aria-hidden="true" />
+                    </button>
+                  </td>
+                </tr>,
+                editing?.index === i && (
+                  <tr key={`${r.startedAt}-edit`} className="border-b border-rule bg-slate-2">
+                    <td colSpan={columns} className="py-2">
+                      <form
+                        className="flex flex-wrap items-center gap-2 font-sans text-base"
+                        onSubmit={(e) => {
+                          e.preventDefault()
+                          const n = Number.parseInt(editing.draft, 10)
+                          if (Number.isFinite(n) && n >= 0) void correct(i, n)
+                        }}
+                      >
+                        <input
+                          type="number"
+                          min={0}
+                          inputMode="numeric"
+                          value={editing.draft}
+                          onChange={(e) => setEditing({ index: i, draft: e.target.value })}
+                          aria-label={`${capital(preset.unit)} in rally ${i + 1}`}
+                          className="figures min-h-11 w-24 rounded-lg border border-rule bg-slate px-3 text-right text-xl text-chalk"
+                        />
+                        <button
+                          type="submit"
+                          className="min-h-11 rounded-lg bg-chalk px-4 font-semibold text-slate"
+                        >
+                          Save
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditing(null)}
+                          className="min-h-11 rounded-lg px-3 font-semibold text-chalk-dim hover:text-chalk"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void removeRally(i)}
+                          className="ml-auto min-h-11 rounded-lg px-3 font-semibold text-chalk-dim hover:text-side-b"
+                        >
+                          Delete rally
+                        </button>
+                      </form>
+                    </td>
+                  </tr>
+                ),
+              ]
             })}
           </tbody>
         </table>

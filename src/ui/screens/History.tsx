@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { SPORTS, sport, type SportId } from '../../engine/sports.ts'
-import { countHits, dailySeries, summarize } from '../../engine/stats.ts'
+import { rallyCount, dailySeries, summarize } from '../../engine/stats.ts'
 import { listSessions, type SessionRecord } from '../../store/db.ts'
 import { DayChart } from '../components/DayChart.tsx'
 import { fmtDate, fmtTime, plural } from '../format.ts'
@@ -113,10 +113,7 @@ export function History() {
           </thead>
           <tbody>
             {mine.map((s) => {
-              const best = Math.max(
-                0,
-                ...s.rallies.map((r) => countHits(r.hits, preset!.soundsPerHit)),
-              )
+              const best = Math.max(0, ...s.rallies.map((r) => rallyCount(r, preset!.soundsPerHit)))
               return (
                 <tr key={s.id} className="border-b border-rule hover:bg-slate-2">
                   <td className="py-0">

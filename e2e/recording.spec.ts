@@ -2,12 +2,12 @@ import { expect, test } from '@playwright/test'
 
 test('a filmed session can be replayed, chaptered by rally', async ({ page }, info) => {
   test.skip(info.project.name !== 'beach-rackets', 'one recording run is enough')
-  // Taps only: what is under test is the film and its chapters. Counting from
+  // Manual: what is under test is the film and its chapters. Counting from
   // the mic is auto-count.spec's job, and the fake camera's moving ball would
   // add its own hits.
   await page.goto('./')
   await page.getByRole('button', { name: 'Beach rackets', exact: true }).click()
-  await page.getByText('Taps only').click()
+  await page.getByText('Manual', { exact: true }).click()
   await page.getByRole('button', { name: /^start/i }).click()
   await page.getByRole('button', { name: 'Film the session' }).click()
   await expect(page.getByLabel('recording')).toBeVisible({ timeout: 10_000 })

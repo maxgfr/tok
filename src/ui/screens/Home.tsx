@@ -29,11 +29,10 @@ export function Home({ onStart }: Props) {
     update({ sportId: id, mode: next.modes.includes(config.mode) ? config.mode : 'rally' })
   }
   const start = () => {
-    // Inside the tap: iOS only lets audio start from a user gesture.
-    if (config.input === 'auto') {
-      primeAudio()
-      void primeMotion()
-    }
+    // Inside the tap: iOS only lets audio start from a user gesture. Manual
+    // needs it too, for the sounds.
+    primeAudio()
+    if (config.input === 'auto') void primeMotion()
     void saveConfig(config)
     onStart(config)
     go('/live')
@@ -75,16 +74,15 @@ export function Home({ onStart }: Props) {
           value={config.input}
           onChange={(input) => update({ input })}
           options={[
-            { value: 'auto', label: 'Auto — listen' },
-            { value: 'manual', label: 'Taps only' },
+            { value: 'manual', label: 'Manual' },
+            { value: 'auto', label: 'Auto · experimental' },
           ]}
         />
-        {config.input === 'auto' && (
-          <p className="text-sm text-chalk-dim">
-            Prop the phone near play, or keep it in a pocket. Sound and motion never leave this
-            phone. Missing hits? Tap the mic during play to tune it.
-          </p>
-        )}
+        <p className="text-sm text-chalk-dim">
+          {config.input === 'manual'
+            ? 'Tap anywhere for each hit, or click with earbuds (Settings). You end each rally.'
+            : 'The mic, motion and camera try to count each hit; tap to add one they miss. You end each rally. Nothing leaves this phone.'}
+        </p>
       </section>
 
       {config.mode === 'match' && (
@@ -150,7 +148,7 @@ export function Home({ onStart }: Props) {
       <div className="sticky bottom-0 mt-auto flex flex-col gap-2 bg-slate pt-3">
         <p className="text-center text-sm text-chalk-dim">
           {config.mode === 'match' ? 'Keep score' : 'Count a rally'} ·{' '}
-          {config.input === 'auto' ? 'listening' : 'taps only'}
+          {config.input === 'auto' ? 'auto, experimental' : 'by hand'}
         </p>
         <button
           type="button"

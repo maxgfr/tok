@@ -11,7 +11,8 @@ interface Options {
   video: React.RefObject<HTMLVideoElement | null>
   preset: SportPreset
   onCandidate: (candidate: HitCandidate) => void
-  onGround: (t: number) => void
+  /** The ball touched the ground. Unused by sessions: the player ends rallies. */
+  onGround?: (t: number) => void
 }
 
 /** Ball tracking on the camera preview. Loads the model only when enabled. */
@@ -32,7 +33,7 @@ export function useVision({
       video: el,
       refractoryMs: preset.refractoryMs,
       onCandidate: (c) => handlers.current.onCandidate(c),
-      onGround: (t) => handlers.current.onGround(t),
+      onGround: (t) => handlers.current.onGround?.(t),
       onReady: (mode) => {
         // Inspectable without a console: which tracker is actually running.
         document.documentElement.dataset.vision = mode

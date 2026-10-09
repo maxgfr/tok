@@ -27,4 +27,6 @@ export interface Rally {
   endReason: RallyEndReason
   /** Match mode: who won the point. */
   winner?: Side
+  /** The player's own count, set when they corrected the rally afterwards. */
+  count?: number
 }

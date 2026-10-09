@@ -21,6 +21,10 @@ export function countHits(hits: readonly Hit[], soundsPerHit: 1 | 2): number {
   return manual + Math.ceil(sensed / soundsPerHit)
 }
 
+/** A rally's count: the player's correction if they made one, else its hits. */
+export const rallyCount = (rally: Rally, soundsPerHit: 1 | 2): number =>
+  rally.count ?? countHits(rally.hits, soundsPerHit)
+
 /** Hits per minute across a rally; null under two seconds, where it would be noise. */
 export function tempo(rally: Rally): number | null {
   const first = rally.hits[0]
@@ -55,7 +59,7 @@ export function summarize(
   for (const session of sessions) {
     if (session.sportId !== sportId) continue
     for (const rally of session.rallies) {
-      const n = countHits(rally.hits, soundsPerHit)
+      const n = rallyCount(rally, soundsPerHit)
       best = Math.max(best, n)
       if (dayKey(rally.startedAt) === today) todayBest = Math.max(todayBest, n)
       total += n
@@ -83,7 +87,7 @@ export function dailySeries(
     for (const rally of session.rallies) {
       const key = dayKey(rally.startedAt)
       const list = days.get(key) ?? []
-      list.push(countHits(rally.hits, soundsPerHit))
+      list.push(rallyCount(rally, soundsPerHit))
       days.set(key, list)
     }
   }

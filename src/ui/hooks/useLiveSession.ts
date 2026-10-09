@@ -4,11 +4,11 @@ import type { RallyConfig } from '../../engine/rally.ts'
 import { replay, type MatchView, type Side } from '../../engine/scoring/index.ts'
 import { sport, type SportPreset } from '../../engine/sports.ts'
 import { judgeRally } from '../../engine/judge.ts'
-import { countHits, summarize, type Summary } from '../../engine/stats.ts'
+import { countHits, rallyCount, summarize, type Summary } from '../../engine/stats.ts'
 import type { Hit, Rally, SensorKind } from '../../engine/types.ts'
 import { buzz } from '../../device/haptics.ts'
 import { listSessions, saveSession, type SessionRecord } from '../../store/db.ts'
-import { loadGoal } from '../coach.ts'
+import { loadAutoEnd, loadGoal } from '../coach.ts'
 import type { LiveConfig } from '../config.ts'
 
 export interface RallyVerdict {
@@ -54,14 +54,19 @@ export const now = (): number => Date.now()
 
 export function useLiveSession(config: LiveConfig, sensors: SensorKind[]): LiveSession {
   const preset = sport(config.sportId)
+  // Seconds of silence that end a rally, if the player asked for it (Settings).
+  const [autoEnd, setAutoEnd] = useState(0)
+  useEffect(() => {
+    void loadAutoEnd().then(setAutoEnd)
+  }, [])
   const rallyConfig = useMemo<RallyConfig>(
     () => ({
-      timeoutMs: preset.rallyTimeoutMs,
+      timeoutMs: autoEnd > 0 ? autoEnd * 1000 : preset.rallyTimeoutMs,
       refractoryMs: preset.refractoryMs,
       // Taps are deliberate; a lone sensor blip is noise. In a match an ace is real.
       minHits: config.mode === 'match' || config.input === 'manual' ? 1 : 2,
     }),
-    [preset, config.mode, config.input],
+    [preset, config.mode, config.input, autoEnd],
   )
   const [state, dispatch] = useReducer(
     (s: ReturnType<typeof initialLive>, a: LiveAction) => liveStep(s, a, rallyConfig),
@@ -99,9 +104,11 @@ export function useLiveSession(config: LiveConfig, sensors: SensorKind[]): LiveS
     }
   }, [id, config.sportId, preset.soundsPerHit, startedAt])
 
-  // The clock drives rally timeouts: one timer, armed for the moment the rally
-  // in progress would time out. Nothing runs between rallies.
-  const lastHitAt = state.rally.phase === 'rally' ? state.rally.hits.at(-1)?.t : undefined
+  // A rally ends when the player says so (End rally, a point, a remote button).
+  // Only if they turned on "end rallies on their own" does a timer, armed for
+  // the moment the silence gets that long, end it for them.
+  const lastHitAt =
+    autoEnd > 0 && state.rally.phase === 'rally' ? state.rally.hits.at(-1)?.t : undefined
   const { timeoutMs } = rallyConfig
   useEffect(() => {
     if (lastHitAt === undefined) return
@@ -124,7 +131,7 @@ export function useLiveSession(config: LiveConfig, sensors: SensorKind[]): LiveS
     let earlier = 0
     let last = 0
     for (const r of state.rallies) {
-      const n = countHits(r.hits, preset.soundsPerHit)
+      const n = rallyCount(r, preset.soundsPerHit)
       if (r === state.lastEnded) last = n
       else earlier = Math.max(earlier, n)
     }
@@ -137,7 +144,7 @@ export function useLiveSession(config: LiveConfig, sensors: SensorKind[]): LiveS
     const rally = state.lastEnded
     if (!rally || judged.current === rally) return
     judged.current = rally
-    const count = countHits(rally.hits, preset.soundsPerHit)
+    const count = rallyCount(rally, preset.soundsPerHit)
     const judgement = judgeRally(count, {
       best: before.best,
       todayBest: before.todayBest,

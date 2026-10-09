@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, test } from 'vitest'
-import { countHits, dailySeries, summarize, tempo, type SessionLike } from './stats.ts'
+import { countHits, dailySeries, rallyCount, summarize, tempo, type SessionLike } from './stats.ts'
 import type { Hit, Rally, SensorKind } from './types.ts'
 
 const hits = (n: number, source: SensorKind = 'audio', start = 0, gap = 1000): Hit[] =>
@@ -87,5 +87,22 @@ describe('dailySeries', () => {
       [6, 4],
       [8, 6],
     ])
+  })
+})
+
+describe('a corrected rally', () => {
+  test('counts what the player said, not what was heard', () => {
+    expect(rallyCount(rally(12), 1)).toBe(12)
+    expect(rallyCount({ ...rally(12), count: 9 }, 1)).toBe(9)
+  })
+
+  test('records and averages follow the correction', () => {
+    const corrected: SessionLike = {
+      ...session(T0, [30, 5]),
+      rallies: [{ ...rally(30, T0), count: 8 }, rally(5, T0 + 60_000)],
+    }
+    const s = summarize([corrected], 'beach-rackets', 1, T0)
+    expect(s.best).toBe(8)
+    expect(s.average).toBeCloseTo(6.5)
   })
 })

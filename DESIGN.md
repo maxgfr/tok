@@ -319,15 +319,15 @@ Every screen except Live sits above a three-item bottom nav (Play, History, Sett
 
 ### Per-mode layouts
 
-- **Home (setup):** title row (tok, "Every hit counts."), then Mode, Count with, Players (match only: two name fields in A blue and B coral, then a first-server segmented control), Sport (two-column square grid, table tennis and beach rackets first). A sticky footer restates the choice in one line over the full-width Start button.
-- **Live, rally:** a 56px header (close, sport · mode, sensor chips — the mic chip opens the sensitivity panel — camera, pocket mode) over a hairline. The whole middle is one tap target (+1) holding the count, the verdict line and the tally gates (10 gates a row, 4 rows, then the block is carried as "+N"). The footer, over a hairline, holds the three-stat strip (Today, Record, then Goal or Rallies) and three 56px controls in the thumb zone: Undo hit, Restart and End rally.
+- **Home (setup):** title row (tok, "Every hit counts."), then Mode, Count with (Manual first, Auto · experimental, one hint line under it), Players (match only: two name fields in A blue and B coral, then a first-server segmented control), Sport (two-column square grid, table tennis and beach rackets first). A sticky footer restates the choice in one line over the full-width Start button.
+- **Live, rally:** a 56px header (close, sport · mode, sensor chips — the mic chip opens the sensitivity panel — the Manual/Auto switch as a hand or a waveform, camera, lock) over a hairline. The whole middle is one tap target (+1) holding the count, the verdict line and the tally gates (10 gates a row, 4 rows, then the block is carried as "+N"). The footer, over a hairline, holds the three-stat strip (Today, Record, then Goal or Rallies) and three 56px controls in the thumb zone: Undo hit, Restart and End rally.
 - **Live, match:** two halves, each a whole-half tap target giving the point (A blue on top, B coral below; side by side in landscape). A slate-2 seam between them is the scorer's column: server dot (chalk), sets (and games for tennis), finished sets, status line and Undo point. In landscape the seam turns vertical.
 - **Pocket mode:** pure black, touches swallowed, a faint "Swipe up to unlock" at the bottom.
 - **History:** title, sport tabs (only when more than one sport has sessions), a summary sentence with the record in yellow, the day chart, then the sessions table (When, Mode, Rallies, Best).
-- **Session:** back + headline, final score in side colours for matches, the summary sentence, Watch the replay, rally bars, the rallies table, delete at the foot.
+- **Session:** back + headline, final score in side colours for matches, the summary sentence, Watch the replay, rally bars, the rallies table (a pencil per row opens an inline correction: count field, Save, Cancel, Delete rally), delete at the foot.
 - **Replay:** back + headline, part tabs, the video, Best rally / Share / Save, then the rally chapter list.
 - **Sensitivity panel:** a sheet from the bottom of Live, opened from the mic chip: "Sensitivity · sport", the level trace, the sensitivity slider, the "Ignore voices" toggle with its count, then Default and Done.
-- **Settings:** Coach (toggles and goal), Backup, Storage, Start over, a one-line footer.
+- **Settings:** Counting (Sounds, End a rally on its own, Microphone), Coach (toggles and goal), Backup, Storage, Start over, a one-line footer.
 
 ### Named Rules
 

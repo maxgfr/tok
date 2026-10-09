@@ -15,6 +15,9 @@ const setup = (overrides: Partial<Parameters<typeof SensitivityPanel>[0]> = {}) 
     onVoiceFilter: vi.fn(),
     onReset: vi.fn(),
     onClose: vi.fn(),
+    micDevice: '',
+    onMicDevice: vi.fn(),
+    onManual: vi.fn(),
     ...overrides,
   }
   render(<SensitivityPanel {...props} />)
@@ -49,4 +52,11 @@ test('Done closes it', async () => {
   const props = setup()
   await userEvent.click(screen.getByRole('button', { name: 'Done' }))
   expect(props.onClose).toHaveBeenCalled()
+})
+
+test('Auto is presented as experimental, with a way back to counting by hand', async () => {
+  const props = setup()
+  expect(screen.getByText(/experimental/i)).toBeTruthy()
+  await userEvent.click(screen.getByRole('button', { name: 'Switch to manual' }))
+  expect(props.onManual).toHaveBeenCalled()
 })

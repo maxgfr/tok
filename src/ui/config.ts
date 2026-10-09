@@ -2,7 +2,7 @@ import type { Side } from '../engine/scoring/index.ts'
 import { sport, type Mode, type SportId } from '../engine/sports.ts'
 import { getSetting, setSetting } from '../store/db.ts'
 
-/** How hits are counted: sensors chosen automatically, or taps only. */
+/** How hits are counted: taps (the default, always right), or every sensor (experimental). */
 export type InputMode = 'auto' | 'manual'
 
 export interface LiveConfig {
@@ -16,7 +16,7 @@ export interface LiveConfig {
 export const DEFAULT_CONFIG: LiveConfig = {
   sportId: 'table-tennis',
   mode: 'rally',
-  input: 'auto',
+  input: 'manual',
   names: { A: 'Me', B: 'You' },
   firstServer: 'A',
 }

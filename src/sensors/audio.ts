@@ -28,6 +28,8 @@ export interface AudioSensor {
 }
 
 export interface AudioOptions extends OnsetProcessorOptions {
+  /** A chosen microphone; '' or absent for the system default. */
+  deviceId?: string
   onCandidate: (candidate: AudioCandidate) => void
   onLevel?: (level: TimedLevel) => void
 }
@@ -41,7 +43,13 @@ export async function startAudio(options: AudioOptions): Promise<AudioSensor> {
   // Raw signal: echo cancellation and noise suppression eat exactly the
   // sharp transients we are listening for.
   const stream = await navigator.mediaDevices.getUserMedia({
-    audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+    audio: {
+      echoCancellation: false,
+      noiseSuppression: false,
+      autoGainControl: false,
+      // 'ideal': a mic that was unplugged falls back to the default instead of failing.
+      ...(options.deviceId ? { deviceId: { ideal: options.deviceId } } : {}),
+    },
   })
   await ctx.audioWorklet.addModule(workletUrl)
   const source = ctx.createMediaStreamSource(stream)

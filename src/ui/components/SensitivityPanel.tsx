@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { plural } from '../format.ts'
 import { LevelTrace, type TracePoint } from './LevelTrace.tsx'
+import { MicPicker } from './MicPicker.tsx'
 import { Toggle } from './Toggle.tsx'
 
 interface Props {
@@ -16,6 +17,10 @@ interface Props {
   onVoiceFilter: (on: boolean) => void
   onReset: () => void
   onClose: () => void
+  micDevice: string
+  onMicDevice: (id: string) => void
+  /** Leave Auto: count by hand for the rest of the session. */
+  onManual: () => void
 }
 
 /**
@@ -33,6 +38,9 @@ export function SensitivityPanel({
   onVoiceFilter,
   onReset,
   onClose,
+  micDevice,
+  onMicDevice,
+  onManual,
 }: Props) {
   const dialog = useRef<HTMLDialogElement>(null)
 
@@ -59,6 +67,10 @@ export function SensitivityPanel({
         <h2 id="sens-panel-h" className="text-xl font-semibold">
           Sensitivity · {sportName}
         </h2>
+        <p className="-mt-2 text-sm text-chalk-dim">
+          Auto is experimental: it can miss hits or hear extra ones. Tap to add one, Undo to remove
+          one, or count by hand.
+        </p>
         <LevelTrace
           levels={levels}
           onsets={onsets}
@@ -92,7 +104,15 @@ export function SensitivityPanel({
           checked={voiceFilter}
           onChange={onVoiceFilter}
         />
-        <div className="grid grid-cols-2 gap-3">
+        <MicPicker value={micDevice} onChange={onMicDevice} />
+        <div className="grid grid-cols-3 gap-3">
+          <button
+            type="button"
+            onClick={onManual}
+            className="min-h-12 rounded-xl bg-slate-2 px-3 font-semibold"
+          >
+            Switch to manual
+          </button>
           <button
             type="button"
             onClick={onReset}

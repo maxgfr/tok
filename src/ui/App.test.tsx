@@ -44,7 +44,7 @@ test('taps count hits in a rally and the session is saved when it ends', async (
 test('restart puts the rally back at 0 and records nothing', async () => {
   const user = userEvent.setup()
   render(<App />)
-  await user.click(await screen.findByRole('radio', { name: /taps only/i }))
+  await user.click(await screen.findByRole('radio', { name: /^manual$/i }))
   await user.click(await screen.findByRole('button', { name: /start table tennis/i }))
   const tapZone = await screen.findByRole('button', { name: /add a hit/i })
   await user.click(tapZone)
@@ -70,6 +70,21 @@ test('opening the live screen with no session set up lands on setup, with the ap
   await waitFor(() => expect(window.location.hash).toBe('#/'))
 })
 
+test('the counting mode can be switched mid-session without losing the rally', async () => {
+  const user = userEvent.setup()
+  render(<App />)
+  await user.click(await screen.findByRole('button', { name: /start table tennis/i }))
+  const tapZone = await screen.findByRole('button', { name: /add a hit/i })
+  await user.click(tapZone)
+  await user.click(tapZone)
+  await user.click(screen.getByRole('button', { name: 'Counting by hand. Switch to Auto' }))
+  expect(
+    screen.getByRole('button', { name: 'Counting with sensors. Switch to Manual' }),
+  ).toBeTruthy()
+  expect(screen.getByRole('button', { name: /current rally: 2/i })).toBeTruthy()
+  expect(screen.getByRole('button', { name: 'Lock the screen' })).toBeTruthy()
+})
+
 test('match mode gives points to the tapped side', async () => {
   const user = userEvent.setup()
   render(<App />)
@@ -85,7 +100,7 @@ test('match mode gives points to the tapped side', async () => {
 test('leaving the live screen without ending still closes the session', async () => {
   const user = userEvent.setup()
   render(<App />)
-  await user.click(await screen.findByRole('radio', { name: /taps only/i }))
+  await user.click(await screen.findByRole('radio', { name: /^manual$/i }))
   await user.click(await screen.findByRole('button', { name: /start table tennis/i }))
   const tapZone = await screen.findByRole('button', { name: /add a hit/i })
   await user.click(tapZone)
@@ -105,7 +120,7 @@ test('leaving the live screen without ending still closes the session', async ()
 test('after ending, Back does not reopen the live screen', async () => {
   const user = userEvent.setup()
   render(<App />)
-  await user.click(await screen.findByRole('radio', { name: /taps only/i }))
+  await user.click(await screen.findByRole('radio', { name: /^manual$/i }))
   await user.click(await screen.findByRole('button', { name: /start table tennis/i }))
   await user.click(await screen.findByRole('button', { name: /add a hit/i }))
   await user.click(screen.getByRole('button', { name: /end rally/i }))
