@@ -12,13 +12,20 @@ test('one rally can be cut out of the recording and shared as an MP4', async ({ 
     }
   })
 
+  // Taps only: the clip is what is under test, not the counting.
   await page.goto('./')
   await page.getByRole('button', { name: 'Beach rackets', exact: true }).click()
-  await page.getByText('Auto — listen').click()
+  await page.getByText('Taps only').click()
   await page.getByRole('button', { name: /^start/i }).click()
   await page.getByRole('button', { name: 'Film the session' }).click()
   await expect(page.getByLabel('recording')).toBeVisible({ timeout: 10_000 })
-  await expect(page.getByText('New record — 10!')).toBeVisible({ timeout: 30_000 })
+  const tap = page.getByRole('button', { name: /add a hit/i })
+  for (let i = 0; i < 3; i += 1) {
+    await page.waitForTimeout(400)
+    await tap.click()
+  }
+  await page.getByRole('button', { name: /end rally/i }).click()
+  await page.waitForTimeout(1000)
   await page.getByRole('button', { name: 'End session' }).click()
   await page.getByRole('button', { name: 'End', exact: true }).click()
 
