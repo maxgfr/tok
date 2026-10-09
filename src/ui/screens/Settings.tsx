@@ -35,11 +35,20 @@ export function Settings() {
   const [goal, setGoal] = useState(0)
   const [voiceAvailable, setVoiceAvailable] = useState(canSpeak)
   const [mic, setMic] = useState('')
+  const [autoEndSport, setAutoEndSport] = useState<SportId>('table-tennis')
   const [autoEnd, setAutoEnd] = useState(0)
   useEffect(() => {
     void loadMicDevice().then(setMic)
-    void loadAutoEnd().then(setAutoEnd)
   }, [])
+  useEffect(() => {
+    let alive = true
+    void loadAutoEnd(autoEndSport).then((seconds) => {
+      if (alive) setAutoEnd(seconds)
+    })
+    return () => {
+      alive = false
+    }
+  }, [autoEndSport])
   useEffect(() => {
     // Voices arrive asynchronously in some browsers.
     const synth = globalThis.speechSynthesis
@@ -120,27 +129,46 @@ export function Settings() {
           disabled={!coach}
           onChange={(sounds) => updateCoach({ sounds })}
         />
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-col gap-2">
           <label htmlFor="auto-end" className="font-semibold">
             End a rally on its own
           </label>
-          <select
-            id="auto-end"
-            value={autoEnd}
-            onChange={(e) => {
-              const seconds = Number(e.target.value)
-              setAutoEnd(seconds)
-              void saveAutoEnd(seconds)
-            }}
-            className="min-h-12 rounded-lg border border-rule bg-slate-2 px-3 text-lg text-chalk"
-          >
-            <option value={0}>Never — I end each rally</option>
-            <option value={3}>After 3 s without a hit</option>
-            <option value={5}>After 5 s without a hit</option>
-            <option value={8}>After 8 s without a hit</option>
-          </select>
+          <div className="grid grid-cols-[1fr_9rem] gap-2">
+            <label className="sr-only" htmlFor="auto-end-sport">
+              Sport for the automatic end
+            </label>
+            <select
+              id="auto-end-sport"
+              value={autoEndSport}
+              onChange={(e) => setAutoEndSport(e.target.value as SportId)}
+              className="min-h-12 rounded-lg border border-rule bg-slate-2 px-3 text-chalk"
+            >
+              {SPORTS.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+            <select
+              id="auto-end"
+              value={autoEnd}
+              onChange={(e) => {
+                const seconds = Number(e.target.value)
+                setAutoEnd(seconds)
+                void saveAutoEnd(autoEndSport, seconds)
+              }}
+              className="min-h-12 rounded-lg border border-rule bg-slate-2 px-3 text-chalk"
+            >
+              <option value={0}>Never</option>
+              <option value={2}>After 2 s</option>
+              <option value={3}>After 3 s</option>
+              <option value={5}>After 5 s</option>
+              <option value={8}>After 8 s</option>
+            </select>
+          </div>
           <span className="text-sm text-chalk-dim">
-            End rally, a point, or the earbuds always end it too.
+            Per sport, after that long without a hit. Never: you end each rally — End rally, a point
+            or the earbuds always can.
           </span>
         </div>
         <MicPicker

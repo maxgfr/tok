@@ -112,8 +112,10 @@ test('a rally waits for End rally, however long the silence', async () => {
   }
 })
 
-test('with "end rallies on their own" set, a silence that long ends the rally', async () => {
-  await setSetting('autoEnd', 3)
+test("with the sport's automatic end set, a silence that long ends the rally", async () => {
+  // Another sport's setting does not apply.
+  await setSetting('autoEnd:beach-rackets', 1)
+  await setSetting('autoEnd:table-tennis', 3)
   vi.useFakeTimers({ shouldAdvanceTime: true, toFake: TIMERS })
   try {
     const config = { ...DEFAULT_CONFIG, input: 'manual' as const }

@@ -57,8 +57,8 @@ export function useLiveSession(config: LiveConfig, sensors: SensorKind[]): LiveS
   // Seconds of silence that end a rally, if the player asked for it (Settings).
   const [autoEnd, setAutoEnd] = useState(0)
   useEffect(() => {
-    void loadAutoEnd().then(setAutoEnd)
-  }, [])
+    void loadAutoEnd(config.sportId).then(setAutoEnd)
+  }, [config.sportId])
   const rallyConfig = useMemo<RallyConfig>(
     () => ({
       timeoutMs: autoEnd > 0 ? autoEnd * 1000 : preset.rallyTimeoutMs,

@@ -16,11 +16,14 @@ export const loadCoach = async (): Promise<CoachSettings> => ({
 })
 
 /**
- * Seconds without a hit after which a rally ends on its own; 0 (the default)
- * means never — the player ends each rally.
+ * Seconds without a hit after which a rally of this sport ends on its own;
+ * 0 (the default) means never — the player ends each rally. Per sport: a
+ * table-tennis exchange pauses far less than a volleyball one.
  */
-export const loadAutoEnd = (): Promise<number> => getSetting('autoEnd', 0)
-export const saveAutoEnd = (seconds: number): Promise<void> => setSetting('autoEnd', seconds)
+export const loadAutoEnd = (sportId: SportId): Promise<number> =>
+  getSetting(`autoEnd:${sportId}`, 0)
+export const saveAutoEnd = (sportId: SportId, seconds: number): Promise<void> =>
+  setSetting(`autoEnd:${sportId}`, seconds)
 
 export const saveCoach = (patch: Partial<CoachSettings>): Promise<void[]> =>
   Promise.all(Object.entries(patch).map(([k, v]) => setSetting(k, v)))
