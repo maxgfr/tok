@@ -327,7 +327,8 @@ Every screen except Live sits above a three-item bottom nav (Play, History, Sett
 - **Session:** back + headline, final score in side colours for matches, the summary sentence, Watch the replay, rally bars, the rallies table (a pencil per row opens an inline correction: count field, Save, Cancel, Delete rally), delete at the foot.
 - **Replay:** back + headline, part tabs, the video, Best rally / Share / Save, then the rally chapter list.
 - **Sensitivity panel:** a sheet from the bottom of Live, opened from the mic chip: "Sensitivity · sport", the level trace, the sensitivity slider, the "Ignore voices" toggle with its count, then Default and Done.
-- **Settings:** Counting (Sounds, End a rally on its own, Microphone), Coach (toggles and goal), Backup, Storage, Start over, a one-line footer.
+- **Settings:** Counting (Sounds, Microphone), Sports (one sport picker, then that sport's goal, automatic rally end, rallies per session, match rules, and a quiet Reset to defaults), Coach (toggles), Backup, Storage, Start over, a one-line footer.
+- **Ending a session:** the header turns into Keep playing (quiet), Don't save (quiet, coral on hover) and End (chalk).
 
 ### Named Rules
 

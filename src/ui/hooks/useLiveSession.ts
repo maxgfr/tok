@@ -7,7 +7,7 @@ import { judgeRally } from '../../engine/judge.ts'
 import { countHits, rallyCount, summarize, type Summary } from '../../engine/stats.ts'
 import type { Hit, Rally, SensorKind } from '../../engine/types.ts'
 import { buzz } from '../../device/haptics.ts'
-import { listSessions, saveSession, type SessionRecord } from '../../store/db.ts'
+import { deleteSession, listSessions, saveSession, type SessionRecord } from '../../store/db.ts'
 import { loadAutoEnd, loadGoal } from '../coach.ts'
 import { loadRules } from '../sportSettings.ts'
 import type { LiveConfig } from '../config.ts'
@@ -48,6 +48,8 @@ export interface LiveSession {
   point: (side: Side) => void
   undoPoint: () => void
   finish: (extra?: Partial<SessionRecord>) => Promise<string | null>
+  /** Ends the session and forgets it: nothing of it stays in History. */
+  discard: () => Promise<void>
 }
 
 /** Epoch ms. Sensor timestamps are converted to it (device/clock.ts). */
@@ -227,6 +229,12 @@ export function useLiveSession(config: LiveConfig, sensors: SensorKind[]): LiveS
     [state, rallyConfig, record, id],
   )
 
+  const discard = useCallback(async () => {
+    // From here on nothing is written; what was saved rally by rally goes too.
+    finishing.current = true
+    await deleteSession(id)
+  }, [id])
+
   return {
     preset,
     id,
@@ -255,5 +263,6 @@ export function useLiveSession(config: LiveConfig, sensors: SensorKind[]): LiveS
     },
     undoPoint: () => dispatch({ type: 'undoPoint' }),
     finish,
+    discard,
   }
 }

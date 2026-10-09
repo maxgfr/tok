@@ -24,6 +24,7 @@ import { SensorChips } from '../components/SensorChips.tsx'
 import { Tally } from '../components/Tally.tsx'
 import { saveConfig, type InputMode, type LiveConfig } from '../config.ts'
 import { loadMicDevice } from '../micDevice.ts'
+import { loadRallyLimit } from '../sportSettings.ts'
 import { useLiveSession, type LiveSession } from '../hooks/useLiveSession.ts'
 import { useCamera } from '../hooks/useCamera.ts'
 import { useVision } from '../hooks/useVision.ts'
@@ -164,6 +165,32 @@ export function Live({ config: initial }: { config: LiveConfig }) {
     go(id ? `/history/${encodeURIComponent(id)}` : '/', { replace: true })
   }
 
+  /** Ends without keeping anything: no session in History, no video. */
+  const discard = async () => {
+    ended.current = true
+    const videos = await stopCamera()
+    await Promise.all([...videos.map(deleteVideo), session.discard()])
+    go('/', { replace: true })
+  }
+
+  // Rally mode with a session length set (Settings): after the last rally,
+  // a moment for its verdict and chime, then the session ends on its own.
+  const [rallyLimit, setRallyLimit] = useState(0)
+  useEffect(() => {
+    void loadRallyLimit(config.sportId).then(setRallyLimit)
+  }, [config.sportId])
+  const limitReached =
+    config.mode === 'rally' &&
+    rallyLimit > 0 &&
+    session.rallies.length >= rallyLimit &&
+    !session.inRally
+  const endRef = useLatest(end)
+  useEffect(() => {
+    if (!limitReached) return
+    const timer = window.setTimeout(() => void endRef.current(), 1500)
+    return () => window.clearTimeout(timer)
+  }, [limitReached, endRef])
+
   return (
     <div
       className="fixed inset-0 flex flex-col bg-slate select-none"
@@ -188,13 +215,20 @@ export function Live({ config: initial }: { config: LiveConfig }) {
         {confirmEnd ? (
           <fieldset className="flex w-full items-center gap-2">
             <legend className="sr-only">End session</legend>
-            <p className="flex-1 font-semibold">End and save this session?</p>
+            <p className="flex-1 font-semibold max-[420px]:sr-only">End this session?</p>
             <button
               type="button"
               onClick={() => setConfirmEnd(false)}
               className="min-h-11 rounded-lg px-3 font-semibold text-chalk-dim hover:text-chalk"
             >
               Keep playing
+            </button>
+            <button
+              type="button"
+              onClick={() => void discard()}
+              className="min-h-11 rounded-lg px-3 font-semibold text-chalk-dim hover:text-side-b"
+            >
+              Don't save
             </button>
             <button
               type="button"
@@ -219,6 +253,9 @@ export function Live({ config: initial }: { config: LiveConfig }) {
               <span className="text-chalk-dim">
                 {' '}
                 · {config.mode === 'match' ? 'Match' : 'Rally'}
+                {config.mode === 'rally' && rallyLimit > 0
+                  ? ` ${Math.min(session.rallies.length, rallyLimit)}/${rallyLimit}`
+                  : ''}
               </span>
             </p>
             <SensorChips

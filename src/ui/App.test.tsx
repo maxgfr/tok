@@ -1,7 +1,7 @@
 import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, expect, test } from 'vitest'
-import { clearAll, listSessions } from '../store/db.ts'
+import { clearAll, listSessions, setSetting } from '../store/db.ts'
 import { App } from './App.tsx'
 
 beforeEach(async () => {
@@ -83,6 +83,44 @@ test('the counting mode can be switched mid-session without losing the rally', a
   ).toBeTruthy()
   expect(screen.getByRole('button', { name: /current rally: 2/i })).toBeTruthy()
   expect(screen.getByRole('button', { name: 'Lock the screen' })).toBeTruthy()
+})
+
+test('a rally session ends on its own after the set number of rallies', async () => {
+  await setSetting('rallyLimit:table-tennis', 2)
+  const user = userEvent.setup()
+  render(<App />)
+  await user.click(await screen.findByRole('button', { name: /start table tennis/i }))
+  const tapZone = await screen.findByRole('button', { name: /add a hit/i })
+  expect(await screen.findByText(/0\/2/)).toBeTruthy()
+  for (let rally = 0; rally < 2; rally += 1) {
+    await user.click(tapZone)
+    await user.click(tapZone)
+    await user.click(screen.getByRole('button', { name: /end rally/i }))
+  }
+  await screen.findByRole('heading', { name: 'Table tennis' }, { timeout: 4000 })
+  const [session] = await listSessions()
+  expect(session?.rallies).toHaveLength(2)
+  expect(session?.endedAt).not.toBeNull()
+})
+
+test('a session can be ended without saving it', async () => {
+  const user = userEvent.setup()
+  render(<App />)
+  await user.click(await screen.findByRole('button', { name: /start table tennis/i }))
+  const tapZone = await screen.findByRole('button', { name: /add a hit/i })
+  await user.click(tapZone)
+  await user.click(tapZone)
+  await user.click(screen.getByRole('button', { name: /end rally/i }))
+  // The finished rally was already saved, as every rally is.
+  await waitFor(async () => expect(await listSessions()).toHaveLength(1))
+  await user.click(screen.getByRole('button', { name: /end session/i }))
+  await user.click(
+    within(screen.getByRole('group', { name: /end session/i })).getByRole('button', {
+      name: "Don't save",
+    }),
+  )
+  await screen.findByRole('button', { name: /start table tennis/i })
+  await waitFor(async () => expect(await listSessions()).toEqual([]))
 })
 
 test('match mode gives points to the tapped side', async () => {

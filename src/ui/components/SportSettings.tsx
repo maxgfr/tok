@@ -21,8 +21,8 @@ const GAMES = [4, 6]
 
 const SELECT = 'min-h-12 rounded-lg border border-rule bg-slate-2 px-3 text-chalk'
 
-/** "Best of 3" for 2 sets to win. */
-const setsLabel = (n: number) => (n === 1 ? 'One set' : `${n} — best of ${2 * n - 1}`)
+/** "Best of 3" when 2 sets win the match. */
+const setsLabel = (n: number) => (n === 1 ? 'One set' : `Best of ${2 * n - 1}`)
 
 /** Choices, with the sport's default among them and marked. */
 function choices(values: number[], fallback: number, label: (n: number) => string) {
@@ -179,7 +179,7 @@ export function SportSettings() {
           {current.rules?.kind === 'rally' && defaults?.kind === 'rally' && (
             <fieldset className="flex flex-col gap-3">
               <legend className="mb-1 font-semibold">Match rules</legend>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="flex flex-col gap-3">
                 <div className="flex flex-col gap-1">
                   <label htmlFor="rules-points" className="text-sm text-chalk-dim">
                     Points to win a set
@@ -219,7 +219,7 @@ export function SportSettings() {
           {current.rules?.kind === 'tennis' && defaults?.kind === 'tennis' && (
             <fieldset className="flex flex-col gap-3">
               <legend className="mb-1 font-semibold">Match rules</legend>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="flex flex-col gap-3">
                 <div className="flex flex-col gap-1">
                   <label htmlFor="rules-games" className="text-sm text-chalk-dim">
                     Games per set

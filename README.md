@@ -12,12 +12,13 @@ Local-first rally & score counter for volleyball, beach rackets, table tennis an
   - rally-point scoring for volleyball, beach volley, badminton, table tennis, pickleball and roundnet;
   - tennis and padel with games, sets and tie-breaks.
 
-  One tap on a half of the screen gives the point.
+  One tap on a half of the screen gives the point. Points per set, sets to win, win by two (or games per set and golden point for tennis and padel) start at the official rules and can be changed per sport in Settings.
 
 - **Auto (experimental)** hears every "tok" through the microphone, with a spectral-flux onset detector in an AudioWorklet. It can also feel impacts through the accelerometer, and on camera it follows the ball with MediaPipe's EfficientDet-Lite0 in a worker. The sensors are fused, so one hit counts once; taps still add what they miss, and you end each rally. Switch between Manual and Auto at any time during a session. Pick the microphone in Settings.
 - **Mic settings, during play**: tap the mic chip to see what the detector hears, set the sensitivity, turn the voice filter on or off (your own voice is not a hit), or go back to the default. It is kept per sport. **Restart** puts the rally in progress back at 0.
 - **Recording** films the session with the score burned in, as an MP4 with exact timing (WebCodecs, MediaRecorder where it is missing). Recordings are stored on the device (OPFS), chaptered and captioned by rally, with a jump to the best rally. You can share or save them, or cut any rally into its own clip.
-- **Corrections**: in a session's detail, fix any rally's count or delete it; records, averages and replay chapters follow.
+- **Corrections**: in a session's detail, fix any rally's count or delete it; records, averages and replay chapters follow. A session can also be ended without saving it.
+- **Per-sport settings**: goal, automatic rally end, rallies per session (the session ends on its own after that many) and match rules, with one Reset to the sport's defaults.
 - **History** shows your record, daily best and average on one fixed scale, and every rally of every session.
 - **Coach** (optional) calls the count or the score out loud, using on-device voices only. Earbuds or a Bluetooth remote can act as a clicker (experimental).
 
