@@ -82,7 +82,7 @@ export function Home({ onStart }: Props) {
         {config.input === 'auto' && (
           <p className="text-sm text-chalk-dim">
             Prop the phone near play, or keep it in a pocket. Sound and motion never leave this
-            phone. Tune it in the Lab.
+            phone. Missing hits? Tap the mic during play to tune it.
           </p>
         )}
       </section>

@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, test } from 'vitest'
 import { steady, synth } from '../test/synth.ts'
-import { calibrateThreshold, OnsetDetector, type Onset } from './onset.ts'
+import { OnsetDetector, type Onset } from './onset.ts'
 
 const SR = 48_000
 
@@ -122,20 +122,5 @@ describe('OnsetDetector', () => {
       median: expect.any(Number),
       spread: expect.any(Number),
     })
-  })
-})
-
-describe('calibrateThreshold', () => {
-  test('puts the threshold between the n-th and the next strongest peak', () => {
-    expect(calibrateThreshold([50, 40, 30, 10, 8], 3)).toBe(20)
-  })
-
-  test('with no weaker peak it keeps a margin under the weakest hit', () => {
-    expect(calibrateThreshold([50, 40, 30], 3)).toBeCloseTo(21)
-  })
-
-  test('stays within sane bounds', () => {
-    expect(calibrateThreshold([1.2, 1.1], 2)).toBeGreaterThanOrEqual(2)
-    expect(calibrateThreshold([], 3)).toBeNull()
   })
 })

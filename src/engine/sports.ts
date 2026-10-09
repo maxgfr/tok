@@ -1,5 +1,5 @@
 // Sport presets: how each game sounds, moves and is scored. The numbers are
-// starting points — the Lab screen tunes sensitivity per device and place.
+// starting points — the mic panel in a session tunes sensitivity per sport and place.
 
 import type { ScoringRules } from './scoring/index.ts'
 import type { SensorKind } from './types.ts'

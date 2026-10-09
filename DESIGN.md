@@ -263,12 +263,12 @@ A dark slate ground in three steps with one hairline rule, chalk in three streng
 
 - **Side A Blue** (`side-a`): player A, everywhere a side is named: the A half of the match board (score, name, an 8% tint, 20% while pressed), A's sets on the seam, the A name and final score in a session, the A name label on Home and the plate.
 - **Side B Coral** (`side-b`): player B, mirrored on all the same places. Coral also carries the cancel: the strike-through over an undone tally stroke, the recording dot, a blocked or missing main sensor chip (at 15% fill), a failed calibration or unreadable recording, and the fill of the final destructive confirmation ("Delete for good").
-- **Live Green** (`live`): a working sensor and a detected hit. The sensor chip while it is counting (15% fill, green icon and label) and each detected hit drawn as a green stroke in the Lab trace. Nothing else is green.
+- **Live Green** (`live`): a working sensor and a detected hit. The sensor chip while it is counting (15% fill, green icon and label) and each detected hit drawn as a green stroke in the sensitivity panel's trace. Nothing else is green.
 
 ### Neutral
 
 - **Slate** (`slate`): the board. Page ground, bottom nav, the Live screen, the hollow centre of average rings in charts. Also the PWA theme and background colour.
-- **Slate Raised** (`slate-2`): the one raised surface. Secondary buttons, inputs and selects, the match seam, unselected tabs, row hover, the Lab trace canvas, the update bar.
+- **Slate Raised** (`slate-2`): the one raised surface. Secondary buttons, inputs and selects, the match seam, unselected tabs, row hover, the level trace canvas, the update bar.
 - **Slate Deep Raised** (`slate-3`): the toggle track at rest and the storage meter track.
 - **Hairline Rule** (`rule`): every 1px border and gridline: segmented controls, the sport grid, table rows, header and footer rules on Live, chart gridlines, the scrollbar thumb.
 - **Chalk Dim** (`chalk-dim`): secondary text: section labels, hints, units, table headers, average lines and rings. 7.2:1 on slate.
@@ -295,11 +295,11 @@ Every Barlow Condensed use goes through the `figures` utility, which sets tabula
 - **Live figure** (800, `figure-live`, line-height 0.82, -0.02em): the rally count on Live. Fills the upper half; chalk, or record yellow while celebrating.
 - **Match figure** (800, `figure-match`, line-height 0.82): each side's score, in that side's colour.
 - **Verdict** (600, `verdict`): the line under the count: the unit mid-rally, "New record — 31!", "3 off today's best. Again?". The celebration lines are figures, not prose.
-- **Display** (800, 3rem): page titles (tok, History, Lab, Settings) and empty-state headlines ("Nothing on the board yet").
+- **Display** (800, 3rem): page titles (tok, History, Settings) and empty-state headlines ("Nothing on the board yet").
 - **Headline** (800, 2.25rem): detail titles (sport name on a session, Replay, "This session is gone").
 - **Stat** (800, 2.25rem): Today / Record / Goal / Rallies on Live; record figures in summary lines run 1.875rem.
 - **Figure inline** (600, 1.5rem): sport names in the sport grid, set and point labels, figures embedded in sentences and tables (1.25rem in table cells, 800 for best columns). The Start button uses figures at 1.875rem 800, uppercase.
-- **Title** (system sans 600, 1.25rem): section headings in Settings and Lab ("Coach", "Sensitivity").
+- **Title** (system sans 600, 1.25rem): section headings in Settings and the sensitivity panel ("Coach", "Sensitivity").
 - **Body** (system sans 400, 1rem / 1.125rem for the summary and empty-state lines): explanations, hints, toggle labels (600).
 - **Label** (system sans 600, 0.875rem, chalk-dim, sentence case): section labels over controls ("Mode", "Count with", "Sport", "Sessions") and sensor chip text. Stat labels and table headers use 0.75rem.
 
@@ -311,22 +311,22 @@ Every Barlow Condensed use goes through the `figures` utility, which sets tabula
 
 ## Layout
 
-One column, centred, with a 16px minimum gutter that grows with the safe-area insets (`safe-x`, `safe-top`, `safe-bottom`). Column widths by screen: 36rem for Home, Settings and empty states; 42rem for Lab and the Live footer; 48rem for History, Session and Replay and the Live tally. Vertical rhythm: 32px between sections on Home and Settings, 24px on History, Lab and Session, 20px on Replay; 12px inside a section, 8px between a label and a table or chart.
+One column, centred, with a 16px minimum gutter that grows with the safe-area insets (`safe-x`, `safe-top`, `safe-bottom`). Column widths by screen: 36rem for Home, Settings and empty states; 42rem for the sensitivity panel and the Live footer; 48rem for History, Session and Replay and the Live tally. Vertical rhythm: 32px between sections on Home and Settings, 24px on History and Session, 20px on Replay; 12px inside a section, 8px between a label and a table or chart.
 
 Touch targets: 44px minimum for quiet and icon buttons, 48px for buttons, inputs, segments and table rows, 52px for sport cells, 56px for Live controls and nav items, 72px for Start.
 
-Every screen except Live sits above a four-item bottom nav (Play, History, Lab, Settings). Live takes the whole viewport (fixed, no nav).
+Every screen except Live sits above a three-item bottom nav (Play, History, Settings). Live takes the whole viewport (fixed, no nav).
 
 ### Per-mode layouts
 
 - **Home (setup):** title row (tok, "Every hit counts."), then Mode, Count with, Players (match only: two name fields in A blue and B coral, then a first-server segmented control), Sport (two-column square grid, table tennis and beach rackets first). A sticky footer restates the choice in one line over the full-width Start button.
-- **Live, rally:** a 56px header (close, sport · mode, sensor chips, camera, pocket mode) over a hairline. The whole middle is one tap target (+1) holding the count, the verdict line and the tally gates (10 gates a row, 4 rows, then the block is carried as "+N"). The footer, over a hairline, holds the three-stat strip (Today, Record, then Goal or Rallies) and two 56px controls in the thumb zone: Undo hit and End rally.
+- **Live, rally:** a 56px header (close, sport · mode, sensor chips — the mic chip opens the sensitivity panel — camera, pocket mode) over a hairline. The whole middle is one tap target (+1) holding the count, the verdict line and the tally gates (10 gates a row, 4 rows, then the block is carried as "+N"). The footer, over a hairline, holds the three-stat strip (Today, Record, then Goal or Rallies) and three 56px controls in the thumb zone: Undo hit, Restart and End rally.
 - **Live, match:** two halves, each a whole-half tap target giving the point (A blue on top, B coral below; side by side in landscape). A slate-2 seam between them is the scorer's column: server dot (chalk), sets (and games for tennis), finished sets, status line and Undo point. In landscape the seam turns vertical.
 - **Pocket mode:** pure black, touches swallowed, a faint "Swipe up to unlock" at the bottom.
 - **History:** title, sport tabs (only when more than one sport has sessions), a summary sentence with the record in yellow, the day chart, then the sessions table (When, Mode, Rallies, Best).
 - **Session:** back + headline, final score in side colours for matches, the summary sentence, Watch the replay, rally bars, the rallies table, delete at the foot.
 - **Replay:** back + headline, part tabs, the video, Best rally / Share / Save, then the rally chapter list.
-- **Lab:** title with sensor chips, sport select, Start listening; then the level trace, sensitivity slider and the ten-hit calibration with its own big count.
+- **Sensitivity panel:** a sheet from the bottom of Live, opened from the mic chip: "Sensitivity · sport", the level trace, the sensitivity slider, the "Ignore voices" toggle with its count, then Default and Done.
 - **Settings:** Coach (toggles and goal), Backup, Storage, Start over, a one-line footer.
 
 ### Named Rules
@@ -394,7 +394,7 @@ A native checkbox drawn as a 48×28px pill switch; the whole row (label and hint
 
 ### Navigation
 
-Bottom nav: four equal columns, 56px tall, 22px icons over a 0.75rem 600 label, on slate behind a top hairline. Active item chalk, others chalk-faint (chalk-dim on hover). History stays active through Session and Replay.
+Bottom nav: three equal columns, 56px tall, 22px icons over a 0.75rem 600 label, on slate behind a top hairline. Active item chalk, others chalk-faint (chalk-dim on hover). History stays active through Session and Replay.
 
 ### The Tally Gate (signature)
 
@@ -420,7 +420,7 @@ Each half is a button: the name (1.25rem sans) over the score (`figure-match`) i
 
 - **Day chart (History):** best and average rally per day on one fixed scale, 0 to the all-time best, with three hairline gridlines (0, half, top). Best is a solid 2px yellow line with filled yellow dots ringed in slate; the average is a 2px chalk-dim line dashed 6/5 with hollow rings (slate fill, chalk-dim stroke). Hover or touch draws a chalk-faint crosshair and states the day in figures in the caption. Axis labels are figures in CSS pixels so they never shrink with the drawing.
 - **Rally bars (Session):** one bar per rally, oldest first, on a fixed y-scale; the longest is yellow, the rest chalk-faint; a few rallies stay narrow bars on the left instead of stretching.
-- **Level trace (Lab):** a canvas on slate-2: the sound in chalk (1.5px), the bar a hit has to clear in yellow (2px), every detected hit as a 3px green stroke.
+- **Level trace (sensitivity panel):** a canvas on slate-2: the sound in chalk (1.5px), the bar a hit has to clear in yellow (2px), every detected hit as a 3px green stroke.
 
 ### Camera legibility
 

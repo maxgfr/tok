@@ -24,31 +24,15 @@ interface Options {
   preset: SportPreset
   /** Fused hits — what a session counts. */
   onHit?: (hit: Hit) => void
-  /** Raw candidates before fusion (Lab). */
-  onCandidate?: (candidate: ScoredCandidate) => void
+  /** The mic level trace, while `setLevels(true)`. */
   onLevel?: (level: TimedLevel) => void
-  /** Overrides the stored per-sport audio threshold (Lab). */
-  threshold?: number
-  /** Post the mic level trace from the start (Lab); see `setLevels`. */
-  levels?: boolean
-  /** Which sensors to try; defaults to every sensor the sport trusts. */
-  use?: AutoSensor[]
 }
 
 /** Starts the sensors a session uses, fuses their candidates, reports what runs. */
-export function useSensors({
-  enabled,
-  preset,
-  onHit,
-  onCandidate,
-  onLevel,
-  threshold,
-  levels = false,
-  use,
-}: Options) {
+export function useSensors({ enabled, preset, onHit, onLevel }: Options) {
   const [audio, setAudio] = useState<SensorStatus>('off')
   const [motion, setMotion] = useState<SensorStatus>('off')
-  const handlers = useLatest({ onHit, onCandidate, onLevel })
+  const handlers = useLatest({ onHit, onLevel })
   const audioSensor = useRef<AudioSensor | null>(null)
   // Settings changed before the mic is up are applied when it starts.
   const pushed = useRef<{ threshold?: number; voiceFilter?: boolean; levels?: boolean }>({})
@@ -60,9 +44,8 @@ export function useSensors({
     },
     [preset],
   )
-  const wanted = use ?? (['audio', 'motion'] as AutoSensor[])
-  const wantAudio = enabled && wanted.includes('audio') && preset.weights.audio > 0
-  const wantMotion = enabled && wanted.includes('motion') && preset.weights.motion > 0
+  const wantAudio = enabled && preset.weights.audio > 0
+  const wantMotion = enabled && preset.weights.motion > 0
 
   const fusion = useRef<Fusion | null>(null)
   useEffect(() => {
@@ -72,7 +55,6 @@ export function useSensors({
   const feed = (candidate: ScoredCandidate) => {
     // tok's own voice is not a hit.
     if (candidate.source === 'audio' && isSpeaking()) return
-    handlers.current.onCandidate?.(candidate)
     const hit = fusion.current?.push(candidate)
     if (hit) handlers.current.onHit?.(hit)
   }
@@ -91,9 +73,9 @@ export function useSensors({
         const started = await startAudio({
           bandHz: preset.bandHz,
           refractoryMs: preset.refractoryMs,
-          threshold: pushed.current.threshold ?? threshold ?? storedThreshold,
+          threshold: pushed.current.threshold ?? storedThreshold,
           voiceFilter: pushed.current.voiceFilter ?? storedVoiceFilter,
-          levels: pushed.current.levels ?? levels,
+          levels: pushed.current.levels ?? false,
           onCandidate: (c) => feedRef.current(c),
           onLevel: (l) => handlers.current.onLevel?.(l),
         })

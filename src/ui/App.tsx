@@ -10,7 +10,6 @@ import { Home } from './screens/Home.tsx'
 const loadLive = () => import('./screens/Live.tsx')
 const Live = lazy(() => loadLive().then((m) => ({ default: m.Live })))
 const History = lazy(() => import('./screens/History.tsx').then((m) => ({ default: m.History })))
-const Lab = lazy(() => import('./screens/Lab.tsx').then((m) => ({ default: m.Lab })))
 const Replay = lazy(() => import('./screens/Replay.tsx').then((m) => ({ default: m.Replay })))
 const SessionDetail = lazy(() =>
   import('./screens/SessionDetail.tsx').then((m) => ({ default: m.SessionDetail })),
@@ -55,7 +54,6 @@ export function App() {
             {route.name === 'history' && <History />}
             {route.name === 'session' && <SessionDetail id={route.id} />}
             {route.name === 'settings' && <Settings />}
-            {route.name === 'lab' && <Lab />}
             {route.name === 'replay' && <Replay id={route.id} />}
           </Suspense>
         </ScreenBoundary>

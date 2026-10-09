@@ -66,7 +66,7 @@ test('opening the live screen with no session set up lands on setup, with the ap
   window.location.hash = '#/live'
   render(<App />)
   expect(await screen.findByRole('navigation', { name: 'Main' })).toBeTruthy()
-  expect(screen.getByRole('button', { name: /start table tennis/i })).toBeTruthy()
+  expect(await screen.findByRole('button', { name: /start table tennis/i })).toBeTruthy()
   await waitFor(() => expect(window.location.hash).toBe('#/'))
 })
 

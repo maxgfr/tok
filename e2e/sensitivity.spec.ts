@@ -4,7 +4,7 @@ import { sensitivityToThreshold } from '../src/ui/thresholds.ts'
 
 type Seen = { threshold?: number; type?: string; value?: number }
 
-test('the sensitivity set in the Lab is the one a session counts with', async ({ page }, info) => {
+test('the sensitivity set during a session is kept for the sport', async ({ page }, info) => {
   test.skip(info.project.name !== 'beach-rackets', 'one sport is enough to prove it')
   // Keep what the page tells the onset detector: its options at start, then
   // every setting pushed to it while it runs.
@@ -26,32 +26,39 @@ test('the sensitivity set in the Lab is the one a session counts with', async ({
   })
   const detector = () => page.evaluate(() => (window as unknown as { detector: Seen[] }).detector)
 
-  await page.goto('./#/lab')
-  await page.getByRole('combobox', { name: 'Sport' }).selectOption({ label: 'Beach rackets' })
-  await expect(page.getByText('Used in every Beach rackets session.')).toBeVisible()
-  await page.getByRole('button', { name: 'Start listening' }).click()
+  const startSession = async () => {
+    await page.getByRole('button', { name: 'Beach rackets', exact: true }).click()
+    await page.getByText('Auto — listen').click()
+    await page.getByRole('button', { name: /^start/i }).click()
+    await expect(page.getByText('Listening')).toBeVisible({ timeout: 10_000 })
+  }
+  const lastPushed = async () => (await detector()).findLast((m) => m?.type === 'threshold')?.value
+  const lastStarted = async () =>
+    (await detector()).findLast((m) => m && 'threshold' in m && !m.type)?.threshold
+
+  await page.goto('./')
+  await startSession()
+  expect(await lastStarted()).toBeCloseTo(DEFAULT_THRESHOLD)
+
+  // The mic chip opens the sport's settings; the slider moves the detector live.
+  await page.getByRole('button', { name: 'Microphone sensitivity' }).click()
+  await expect(page.getByRole('heading', { name: 'Sensitivity · Beach rackets' })).toBeVisible()
   await page.getByRole('slider', { name: 'Sensitivity' }).fill('0')
-  await expect(page.locator('output[for="sensitivity"]')).toHaveText('0')
+  await expect.poll(lastPushed).toBeCloseTo(sensitivityToThreshold(0))
+  await page.getByRole('button', { name: 'Done' }).click()
 
+  // The next session of that sport starts where this one left it…
+  await page.getByRole('button', { name: 'End session' }).click()
+  await page.getByRole('button', { name: 'End', exact: true }).click()
   await page.getByRole('link', { name: 'Play' }).click()
-  await page.getByRole('button', { name: 'Beach rackets', exact: true }).click()
-  await page.getByText('Auto — listen').click()
-  await page.getByRole('button', { name: /^start/i }).click()
-  await expect(page.getByText('Listening')).toBeVisible({ timeout: 10_000 })
+  await startSession()
+  expect(await lastStarted()).toBeCloseTo(sensitivityToThreshold(0))
 
-  // The session's detector starts at the Lab's value…
-  const started = (await detector()).filter((m) => m && 'threshold' in m).at(-1)
-  expect(started?.threshold).toBeCloseTo(sensitivityToThreshold(0))
-
-  // …and "Default" in the session's mic panel moves it live, without a restart.
+  // …and Default brings it back, still live.
   await page.getByRole('button', { name: 'Microphone sensitivity' }).click()
   await page.getByRole('button', { name: 'Default' }).click()
   await page.getByRole('button', { name: 'Done' }).click()
-  await expect
-    .poll(async () => (await detector()).filter((m) => m?.type === 'threshold').at(-1)?.value)
-    .toBe(DEFAULT_THRESHOLD)
-
-  // Still counting every hit of the recording.
+  await expect.poll(lastPushed).toBe(DEFAULT_THRESHOLD)
   await expect(page.getByRole('button', { name: 'Add a hit. Current rally: 10' })).toBeVisible({
     timeout: 30_000,
   })

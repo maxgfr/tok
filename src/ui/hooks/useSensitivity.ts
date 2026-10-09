@@ -22,8 +22,8 @@ interface Options {
 }
 
 /**
- * The microphone settings of one sport, as the Lab and a live session both
- * see them: what one changes, the other counts with.
+ * The microphone settings of one sport, kept on the device: what a session
+ * changes is what the next one of that sport starts with.
  */
 export function useSensitivity(sportId: SportId, { onChange }: Options = {}) {
   // Tagged with its sport: another sport's values never show while this one loads.
@@ -66,15 +66,6 @@ export function useSensitivity(sportId: SportId, { onChange }: Options = {}) {
     [apply, sportId],
   )
 
-  /** An exact threshold, as calibration finds it. */
-  const setThreshold = useCallback(
-    async (k: number) => {
-      apply({ threshold: k })
-      await saveThreshold(sportId, k)
-    },
-    [apply, sportId],
-  )
-
   const setVoiceFilter = useCallback(
     async (on: boolean) => {
       apply({ voiceFilter: on })
@@ -95,7 +86,6 @@ export function useSensitivity(sportId: SportId, { onChange }: Options = {}) {
     sensitivity: thresholdToSensitivity(threshold ?? DEFAULT_THRESHOLD),
     voiceFilter,
     setSensitivity,
-    setThreshold,
     setVoiceFilter,
     reset,
   }

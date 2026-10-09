@@ -6,7 +6,6 @@ export type Route =
   | { name: 'history' }
   | { name: 'session'; id: string }
   | { name: 'replay'; id: string }
-  | { name: 'lab' }
   | { name: 'settings' }
 
 export function parseHash(hash: string): Route {
@@ -14,7 +13,6 @@ export function parseHash(hash: string): Route {
   const [head, id] = parts
   switch (head) {
     case 'live':
-    case 'lab':
     case 'settings':
       return { name: head }
     case 'history':

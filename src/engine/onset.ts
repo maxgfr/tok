@@ -267,17 +267,3 @@ export class OnsetDetector {
     return { t, score, confidence: 1 - this.threshold / score }
   }
 }
-
-/**
- * From the peak scores recorded while the player made `expected` hits, the
- * threshold that keeps exactly those hits: halfway between the weakest hit and
- * the strongest non-hit, or 30% under the weakest hit when nothing else fired.
- */
-export function calibrateThreshold(scores: readonly number[], expected: number): number | null {
-  if (scores.length === 0 || expected < 1) return null
-  const sorted = [...scores].sort((a, b) => b - a)
-  const weakestHit = sorted[Math.min(expected, sorted.length) - 1]!
-  const strongestMiss = sorted[expected]
-  const value = strongestMiss === undefined ? weakestHit * 0.7 : (weakestHit + strongestMiss) / 2
-  return Math.min(500, Math.max(2, value))
-}
