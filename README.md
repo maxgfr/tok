@@ -6,7 +6,7 @@ Local-first rally & score counter for volleyball, beach rackets, table tennis an
 
 ## What it does
 
-- **Manual (the default)**: tap anywhere for each hit, or click with Bluetooth earbuds or a remote (play = +1, next = end rally, previous = undo). You end each rally; a click and a chime confirm every hit and every rally end. For each sport, Settings can end rallies on their own after 2 to 8 s without a hit.
+- **Manual (the default)**: tap anywhere for each hit, or click with Bluetooth earbuds or a remote (play = +1, next = end rally, previous = undo). A click and a chime confirm every hit and every rally end. A rally ends after its sport's usual pause (1.5 s for table tennis, 2.5 s for beach rackets, 4 s for volleyball…) or when you end it; Settings changes that per sport, down to No limit (the default for Custom).
 - **Rally mode** counts touches in a row (beach rackets, table tennis, volleyball passing, keep-ups, jump rope…). It celebrates today's best, your record and your goal.
 - **Match mode** keeps the score with each sport's rules:
   - rally-point scoring for volleyball, beach volley, badminton, table tennis, pickleball and roundnet;

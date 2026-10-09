@@ -90,11 +90,16 @@ test('an idle session does not re-render', async () => {
   }
 })
 
-test('a rally waits for End rally, however long the silence', async () => {
+test('with No limit, a rally waits for End rally, however long the silence', async () => {
+  await setSetting('autoEnd:table-tennis', 0)
   vi.useFakeTimers({ shouldAdvanceTime: true, toFake: TIMERS })
   try {
     const config = { ...DEFAULT_CONFIG, input: 'auto' as const }
     const { result } = renderHook(() => useLiveSession(config, ['audio']))
+    // Let the setting load.
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 50))
+    })
     act(() => {
       result.current.sense({ t: Date.now(), sources: ['audio'], confidence: 1 })
       result.current.sense({ t: Date.now() + 300, sources: ['audio'], confidence: 1 })
@@ -137,6 +142,32 @@ test("with the sport's automatic end set, a silence that long ends the rally", a
     })
     expect(result.current.inRally).toBe(false)
     expect(result.current.rallies).toHaveLength(1)
+  } finally {
+    vi.useRealTimers()
+  }
+})
+
+test("untouched, a rally ends after the sport's recommended silence", async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true, toFake: TIMERS })
+  try {
+    // Table tennis: 1.5 s without a hit.
+    const config = { ...DEFAULT_CONFIG, input: 'manual' as const }
+    const { result } = renderHook(() => useLiveSession(config, ['manual']))
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 50))
+    })
+    act(() => {
+      result.current.tap()
+      result.current.tap()
+    })
+    await act(async () => {
+      vi.advanceTimersByTime(1000)
+    })
+    expect(result.current.inRally).toBe(true)
+    await act(async () => {
+      vi.advanceTimersByTime(1000)
+    })
+    expect(result.current.inRally).toBe(false)
   } finally {
     vi.useRealTimers()
   }

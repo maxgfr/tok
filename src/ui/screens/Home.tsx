@@ -80,8 +80,8 @@ export function Home({ onStart }: Props) {
         />
         <p className="text-sm text-chalk-dim">
           {config.input === 'manual'
-            ? 'Tap anywhere for each hit, or click with earbuds (Settings). You end each rally.'
-            : 'The mic, motion and camera try to count each hit; tap to add one they miss. You end each rally. Nothing leaves this phone.'}
+            ? 'Tap anywhere for each hit, or click with earbuds (Settings). A rally ends after the sport’s usual pause, or when you end it.'
+            : 'The mic, motion and camera try to count each hit; tap to add one they miss. A rally ends after the sport’s usual pause, or when you end it. Nothing leaves this phone.'}
         </p>
       </section>
 

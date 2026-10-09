@@ -13,10 +13,12 @@ test('in Auto, every hit of the recording is counted on its own', async ({ page 
   await page.getByRole('button', { name: /^start/i }).click()
 
   await expect(page.getByText('Listening')).toBeVisible({ timeout: 10_000 })
-  // Every hit of the recording is counted on its own; the player ends the rally.
+  // Every hit of the recording is counted on its own, and the rally ends after
+  // the sport's recommended silence.
+  await expect(page.getByText(new RegExp(`New record — ${sport.hits}!`))).toBeVisible({
+    timeout: 30_000,
+  })
   await expect(
     page.getByRole('button', { name: `Add a hit. Current rally: ${sport.hits}` }),
-  ).toBeVisible({ timeout: 30_000 })
-  await page.getByRole('button', { name: /end rally/i }).click()
-  await expect(page.getByText(new RegExp(`New record — ${sport.hits}!`))).toBeVisible()
+  ).toBeVisible()
 })

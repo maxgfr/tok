@@ -62,16 +62,25 @@ test('sounds are on until turned off', async () => {
   await expect.poll(() => getSetting('sounds', true)).toBe(false)
 })
 
-test('each sport ends its rallies by hand until an automatic end is chosen for it', async () => {
+test('each sport starts at its recommended automatic end, and can be changed on its own', async () => {
   const user = userEvent.setup()
   render(<Settings />)
-  await user.selectOptions(
-    await screen.findByLabelText('Sport for the automatic end'),
-    'beach-rackets',
-  )
-  const select = screen.getByLabelText('End a rally on its own')
-  expect((select as HTMLSelectElement).value).toBe('0')
-  await user.selectOptions(select, '5')
-  await expect.poll(() => getSetting('autoEnd:beach-rackets', 0)).toBe(5)
-  expect(await getSetting('autoEnd:table-tennis', 0)).toBe(0)
+  const sportSelect = await screen.findByLabelText('Sport for the automatic end')
+  await user.selectOptions(sportSelect, 'beach-rackets')
+  const select = screen.getByLabelText('End a rally on its own') as HTMLSelectElement
+  await expect.poll(() => select.value).toBe('2.5')
+  expect(select.selectedOptions[0]?.textContent).toMatch(/recommended/i)
+
+  await user.selectOptions(select, '0')
+  await expect.poll(() => getSetting('autoEnd:beach-rackets', -1)).toBe(0)
+  expect(await getSetting('autoEnd:table-tennis', -1)).toBe(-1)
+})
+
+test('a sport with no known rhythm has no limit by default', async () => {
+  const user = userEvent.setup()
+  render(<Settings />)
+  await user.selectOptions(await screen.findByLabelText('Sport for the automatic end'), 'custom')
+  const select = screen.getByLabelText('End a rally on its own') as HTMLSelectElement
+  await expect.poll(() => select.value).toBe('0')
+  expect(select.selectedOptions[0]?.textContent).toMatch(/no limit.*recommended/i)
 })

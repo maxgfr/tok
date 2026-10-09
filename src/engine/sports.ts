@@ -33,6 +33,10 @@ export interface SportPreset {
   /** Trust in each sensor for this sport, 0..1 — feeds the fusion. */
   weights: Record<AutoSensor, number>
   refractoryMs: number
+  /**
+   * The silence after which a rally of this sport is over: the recommended
+   * automatic end, used until the player picks another. 0 = no limit.
+   */
   rallyTimeoutMs: number
   /** Frequency band where this sport's contact sound lives. */
   bandHz: [number, number]
@@ -228,7 +232,8 @@ export const SPORTS: readonly SportPreset[] = [
     dominant: 'audio',
     weights: { audio: 1, motion: 1, vision: 1 },
     refractoryMs: 200,
-    rallyTimeoutMs: 3000,
+    // No known rhythm: no automatic end unless the player sets one.
+    rallyTimeoutMs: 0,
     bandHz: [500, 6000],
     soundsPerHit: 1,
     scoring: { kind: 'rally', pointsToWin: 21, setsToWin: 2, winBy: 2, serve: 'winner' },

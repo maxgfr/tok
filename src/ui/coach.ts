@@ -1,4 +1,4 @@
-import type { SportId } from '../engine/sports.ts'
+import { sport, type SportId } from '../engine/sports.ts'
 import { getSetting, setSetting } from '../store/db.ts'
 
 /** Coach preferences: spoken calls, sounds, the remote, and a goal per sport. */
@@ -15,13 +15,17 @@ export const loadCoach = async (): Promise<CoachSettings> => ({
   sounds: await getSetting('sounds', true),
 })
 
+/** The sport's own pause between rallies, in seconds; 0 = no limit. */
+export const recommendedAutoEnd = (sportId: SportId): number => sport(sportId).rallyTimeoutMs / 1000
+
 /**
  * Seconds without a hit after which a rally of this sport ends on its own;
- * 0 (the default) means never — the player ends each rally. Per sport: a
- * table-tennis exchange pauses far less than a volleyball one.
+ * 0 means never — the player ends each rally. Per sport, starting at the
+ * sport's recommendation: a table-tennis exchange pauses far less than a
+ * volleyball one.
  */
 export const loadAutoEnd = (sportId: SportId): Promise<number> =>
-  getSetting(`autoEnd:${sportId}`, 0)
+  getSetting(`autoEnd:${sportId}`, recommendedAutoEnd(sportId))
 export const saveAutoEnd = (sportId: SportId, seconds: number): Promise<void> =>
   setSetting(`autoEnd:${sportId}`, seconds)
 

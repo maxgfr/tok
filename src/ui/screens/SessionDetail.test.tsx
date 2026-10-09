@@ -41,7 +41,7 @@ test("a rally's count can be corrected afterwards", async () => {
   await user.type(field, '10')
   await user.click(screen.getByRole('button', { name: 'Save' }))
   await expect.poll(async () => (await getSession('s1'))?.rallies[1]?.count).toBe(10)
-  expect(screen.getByRole('cell', { name: '10' })).toBeTruthy()
+  expect(await screen.findByRole('cell', { name: '10' })).toBeTruthy()
 })
 
 test('a rally that was not one can be deleted', async () => {
