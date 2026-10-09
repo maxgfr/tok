@@ -8,25 +8,13 @@ import {
   storageEstimate,
 } from '../../store/db.ts'
 import { clearVideos } from '../../record/videoStore.ts'
-import { SPORTS, type SportId } from '../../engine/sports.ts'
 import { canSpeak } from '../../device/speech.ts'
 import { MicPicker } from '../components/MicPicker.tsx'
+import { SportSettings } from '../components/SportSettings.tsx'
 import { Toggle } from '../components/Toggle.tsx'
-import {
-  loadAutoEnd,
-  recommendedAutoEnd,
-  loadCoach,
-  loadGoal,
-  saveAutoEnd,
-  saveCoach,
-  saveGoal,
-  type CoachSettings,
-} from '../coach.ts'
+import { loadCoach, saveCoach, type CoachSettings } from '../coach.ts'
 import { fmtBytes, plural } from '../format.ts'
 import { loadMicDevice, saveMicDevice } from '../micDevice.ts'
-
-/** Seconds of silence that can end a rally; every sport's recommendation is one of them. */
-const AUTO_END_CHOICES = [0, 1.5, 2, 2.5, 3, 3.5, 4, 5, 8]
 
 export function Settings() {
   const [estimate, setEstimate] = useState<{ usage: number; quota: number } | null>(null)
@@ -35,24 +23,11 @@ export function Settings() {
   const [confirmWipe, setConfirmWipe] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
   const [coach, setCoach] = useState<CoachSettings | null>(null)
-  const [goalSport, setGoalSport] = useState<SportId>('table-tennis')
-  const [goal, setGoal] = useState(0)
   const [voiceAvailable, setVoiceAvailable] = useState(canSpeak)
   const [mic, setMic] = useState('')
-  const [autoEndSport, setAutoEndSport] = useState<SportId>('table-tennis')
-  const [autoEnd, setAutoEnd] = useState(0)
   useEffect(() => {
     void loadMicDevice().then(setMic)
   }, [])
-  useEffect(() => {
-    let alive = true
-    void loadAutoEnd(autoEndSport).then((seconds) => {
-      if (alive) setAutoEnd(seconds)
-    })
-    return () => {
-      alive = false
-    }
-  }, [autoEndSport])
   useEffect(() => {
     // Voices arrive asynchronously in some browsers.
     const synth = globalThis.speechSynthesis
@@ -65,9 +40,6 @@ export function Settings() {
   useEffect(() => {
     void loadCoach().then(setCoach)
   }, [])
-  useEffect(() => {
-    void loadGoal(goalSport).then(setGoal)
-  }, [goalSport])
 
   const updateCoach = (patch: Partial<CoachSettings>) => {
     if (!coach) return
@@ -133,49 +105,6 @@ export function Settings() {
           disabled={!coach}
           onChange={(sounds) => updateCoach({ sounds })}
         />
-        <div className="flex flex-col gap-2">
-          <label htmlFor="auto-end" className="font-semibold">
-            End a rally on its own
-          </label>
-          <div className="grid grid-cols-2 gap-2">
-            <label className="sr-only" htmlFor="auto-end-sport">
-              Sport for the automatic end
-            </label>
-            <select
-              id="auto-end-sport"
-              value={autoEndSport}
-              onChange={(e) => setAutoEndSport(e.target.value as SportId)}
-              className="min-h-12 rounded-lg border border-rule bg-slate-2 px-3 text-chalk"
-            >
-              {SPORTS.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-            <select
-              id="auto-end"
-              value={autoEnd}
-              onChange={(e) => {
-                const seconds = Number(e.target.value)
-                setAutoEnd(seconds)
-                void saveAutoEnd(autoEndSport, seconds)
-              }}
-              className="min-h-12 rounded-lg border border-rule bg-slate-2 px-3 text-chalk"
-            >
-              {AUTO_END_CHOICES.map((seconds) => (
-                <option key={seconds} value={seconds}>
-                  {seconds === 0 ? 'No limit' : `${seconds} s`}
-                  {seconds === recommendedAutoEnd(autoEndSport) ? ' · recommended' : ''}
-                </option>
-              ))}
-            </select>
-          </div>
-          <span className="text-sm text-chalk-dim">
-            How long without a hit ends a rally of that sport, starting at its usual pause. No
-            limit: you end each rally — End rally, a point or the earbuds always can.
-          </span>
-        </div>
         <MicPicker
           value={mic}
           onChange={(id) => {
@@ -183,6 +112,13 @@ export function Settings() {
             void saveMicDevice(id)
           }}
         />
+      </section>
+
+      <section aria-labelledby="sports-h" className="flex flex-col gap-3">
+        <h2 id="sports-h" className="text-xl font-semibold">
+          Sports
+        </h2>
+        <SportSettings />
       </section>
 
       <section aria-labelledby="coach-h" className="flex flex-col gap-3">
@@ -207,47 +143,6 @@ export function Settings() {
           disabled={!coach}
           onChange={(remote) => updateCoach({ remote })}
         />
-        <div className="flex flex-col gap-2">
-          <span className="font-semibold">Goal</span>
-          <div className="grid grid-cols-[1fr_7rem] gap-2">
-            <label className="sr-only" htmlFor="goal-sport">
-              Sport
-            </label>
-            <select
-              id="goal-sport"
-              value={goalSport}
-              onChange={(e) => setGoalSport(e.target.value as SportId)}
-              className="min-h-12 rounded-lg border border-rule bg-slate-2 px-3 text-chalk"
-            >
-              {SPORTS.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-            <label className="sr-only" htmlFor="goal-value">
-              Goal in one rally
-            </label>
-            <input
-              id="goal-value"
-              type="number"
-              inputMode="numeric"
-              min={0}
-              max={9999}
-              placeholder="None"
-              value={goal || ''}
-              onChange={(e) => {
-                const value = Math.max(0, Math.min(9999, Math.round(Number(e.target.value) || 0)))
-                setGoal(value)
-                void saveGoal(goalSport, value)
-              }}
-              className="figures min-h-12 rounded-lg border border-rule bg-slate-2 px-3 text-right text-2xl text-chalk placeholder:text-chalk-faint"
-            />
-          </div>
-          <span className="text-sm text-chalk-dim">
-            One rally to reach. The board cheers the first time each day.
-          </span>
-        </div>
       </section>
 
       <section aria-labelledby="backup-h" className="flex flex-col gap-3">

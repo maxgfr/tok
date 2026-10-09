@@ -65,7 +65,7 @@ test('sounds are on until turned off', async () => {
 test('each sport starts at its recommended automatic end, and can be changed on its own', async () => {
   const user = userEvent.setup()
   render(<Settings />)
-  const sportSelect = await screen.findByLabelText('Sport for the automatic end')
+  const sportSelect = await screen.findByLabelText('Sport')
   await user.selectOptions(sportSelect, 'beach-rackets')
   const select = screen.getByLabelText('End a rally on its own') as HTMLSelectElement
   await expect.poll(() => select.value).toBe('2.5')
@@ -79,8 +79,34 @@ test('each sport starts at its recommended automatic end, and can be changed on 
 test('a sport with no known rhythm has no limit by default', async () => {
   const user = userEvent.setup()
   render(<Settings />)
-  await user.selectOptions(await screen.findByLabelText('Sport for the automatic end'), 'custom')
+  await user.selectOptions(await screen.findByLabelText('Sport'), 'custom')
   const select = screen.getByLabelText('End a rally on its own') as HTMLSelectElement
   await expect.poll(() => select.value).toBe('0')
   expect(select.selectedOptions[0]?.textContent).toMatch(/no limit.*recommended/i)
+})
+
+test("a sport's match rules start official, can be changed, and Reset brings them back", async () => {
+  const user = userEvent.setup()
+  render(<Settings />)
+  await user.selectOptions(await screen.findByLabelText('Sport'), 'table-tennis')
+  const points = (await screen.findByLabelText('Points to win a set')) as HTMLSelectElement
+  await expect.poll(() => points.value).toBe('11')
+  await user.selectOptions(points, '21')
+  await expect.poll(() => getSetting('rules:table-tennis', {})).toEqual({ pointsToWin: 21 })
+
+  await user.selectOptions(screen.getByLabelText('Rallies per session'), '10')
+  await expect.poll(() => getSetting('rallyLimit:table-tennis', 0)).toBe(10)
+
+  await user.click(screen.getByRole('button', { name: 'Reset Table tennis to defaults' }))
+  await expect.poll(() => points.value).toBe('11')
+  await expect.poll(() => getSetting('rules:table-tennis', null)).toBeNull()
+  expect((screen.getByLabelText('Rallies per session') as HTMLSelectElement).value).toBe('0')
+})
+
+test('tennis rules are games and sets', async () => {
+  const user = userEvent.setup()
+  render(<Settings />)
+  await user.selectOptions(await screen.findByLabelText('Sport'), 'tennis')
+  expect(((await screen.findByLabelText('Games per set')) as HTMLSelectElement).value).toBe('6')
+  expect(screen.queryByLabelText('Points to win a set')).toBeNull()
 })
