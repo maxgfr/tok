@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { initialLive, liveStep, matchPoints, type LiveAction } from '../../engine/live.ts'
 import type { RallyConfig } from '../../engine/rally.ts'
-import { replay, type MatchView, type Side } from '../../engine/scoring/index.ts'
+import { replay, type MatchView, type ScoringRules, type Side } from '../../engine/scoring/index.ts'
 import { sport, type SportPreset } from '../../engine/sports.ts'
 import { judgeRally } from '../../engine/judge.ts'
 import { countHits, rallyCount, summarize, type Summary } from '../../engine/stats.ts'
@@ -9,6 +9,7 @@ import type { Hit, Rally, SensorKind } from '../../engine/types.ts'
 import { buzz } from '../../device/haptics.ts'
 import { listSessions, saveSession, type SessionRecord } from '../../store/db.ts'
 import { loadAutoEnd, loadGoal } from '../coach.ts'
+import { loadRules } from '../sportSettings.ts'
 import type { LiveConfig } from '../config.ts'
 
 export interface RallyVerdict {
@@ -58,6 +59,12 @@ export function useLiveSession(config: LiveConfig, sensors: SensorKind[]): LiveS
   const [autoEnd, setAutoEnd] = useState(0)
   useEffect(() => {
     void loadAutoEnd(config.sportId).then(setAutoEnd)
+  }, [config.sportId])
+  // The match rules the player set for this sport (Settings), else the official ones.
+  // The score is replayed from the points, so rules that load a moment late still apply.
+  const [rules, setRules] = useState<ScoringRules | null>(preset.scoring)
+  useEffect(() => {
+    void loadRules(config.sportId).then(setRules)
   }, [config.sportId])
   const rallyConfig = useMemo<RallyConfig>(
     () => ({
@@ -165,11 +172,11 @@ export function useLiveSession(config: LiveConfig, sensors: SensorKind[]): LiveS
       sensors: stableSensors,
       rallies,
       match:
-        config.mode === 'match' && preset.scoring
-          ? { rules: preset.scoring, firstServer: config.firstServer, names: config.names }
+        config.mode === 'match' && rules
+          ? { rules, firstServer: config.firstServer, names: config.names }
           : null,
     }),
-    [id, config, startedAt, stableSensors, preset.scoring],
+    [id, config, startedAt, stableSensors, rules],
   )
 
   // Persist as rallies complete, so a crash or a closed tab loses at most one rally.
@@ -186,10 +193,10 @@ export function useLiveSession(config: LiveConfig, sensors: SensorKind[]): LiveS
 
   const match = useMemo(
     () =>
-      config.mode === 'match' && preset.scoring
-        ? replay(preset.scoring, matchPoints(state.rallies), config.firstServer)
+      config.mode === 'match' && rules
+        ? replay(rules, matchPoints(state.rallies), config.firstServer)
         : null,
-    [config.mode, config.firstServer, preset.scoring, state.rallies],
+    [config.mode, config.firstServer, rules, state.rallies],
   )
 
   const tap = useCallback(() => {

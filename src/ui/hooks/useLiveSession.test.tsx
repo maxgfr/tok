@@ -5,6 +5,15 @@ import { clearAll, getSession, setSetting, type VideoRef } from '../../store/db.
 import { DEFAULT_CONFIG } from '../config.ts'
 import { useLiveSession } from './useLiveSession.ts'
 
+test('a match is played by the rules set for its sport', async () => {
+  await setSetting('rules:table-tennis', { pointsToWin: 3, setsToWin: 1 })
+  const config = { ...DEFAULT_CONFIG, mode: 'match' as const, input: 'manual' as const }
+  const { result } = renderHook(() => useLiveSession(config, ['manual']))
+  for (let i = 0; i < 3; i += 1) act(() => result.current.point('A'))
+  // Official table tennis would still be at 3–0 in the first game.
+  await waitFor(() => expect(result.current.match?.winner).toBe('A'))
+})
+
 beforeEach(async () => {
   await clearAll()
 })
