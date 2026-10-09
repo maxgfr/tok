@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, Download, Play, Share2, Trophy } from 'lucide-react'
 import { sport } from '../../engine/sports.ts'
-import { chapters } from '../../record/chapters.ts'
+import { chapters, type Chapter } from '../../record/chapters.ts'
 import { readVideo } from '../../record/videoStore.ts'
 import { chaptersVtt } from '../../record/vtt.ts'
 import { getSession, type SessionRecord } from '../../store/db.ts'
@@ -12,6 +12,11 @@ export function Replay({ id }: { id: string }) {
   const [part, setPart] = useState(0)
   const [blob, setBlob] = useState<Blob | null | undefined>(undefined)
   const [message, setMessage] = useState<string | null>(null)
+  const [cutting, setCutting] = useState(false)
+  // A cut rally waiting for its own tap: the browser only opens the share sheet
+  // from a fresh one, and cutting outlasts the tap that asked for it.
+  const [clip, setClip] = useState<{ file: File; url: string; label: string } | null>(null)
+  useEffect(() => () => (clip ? URL.revokeObjectURL(clip.url) : undefined), [clip])
   const player = useRef<HTMLVideoElement>(null)
 
   useEffect(() => {
@@ -90,6 +95,41 @@ export function Replay({ id }: { id: string }) {
     }
   }
 
+  /** Cuts one rally into its own MP4, then shares it (or saves it where sharing files is not possible). */
+  /** Cuts one rally into its own MP4, ready to share or save. */
+  const cutRally = async (c: Chapter) => {
+    if (!blob || cutting) return
+    setCutting(true)
+    setClip(null)
+    setMessage('Cutting the clip…')
+    try {
+      const { exportClip } = await import('../../record/clip.ts')
+      const cut = await exportClip(blob, c.start, c.end)
+      const name = fileName.replace(/\.(mp4|webm)$/, `-rally-${c.index + 1}.mp4`)
+      const file = new File([cut], name, { type: 'video/mp4' })
+      setClip({
+        file,
+        url: URL.createObjectURL(file),
+        label: `Rally ${c.index + 1} · ${c.count} ${preset.unit}`,
+      })
+      setMessage(null)
+    } catch {
+      setMessage('This rally could not be cut. Share or save the whole video instead.')
+    } finally {
+      setCutting(false)
+    }
+  }
+
+  const shareClip = async () => {
+    if (!clip) return
+    try {
+      await navigator.share({ files: [clip.file], title: `tok — ${clip.label}` })
+    } catch (error) {
+      if ((error as DOMException).name !== 'AbortError')
+        setMessage('Sharing did not work here — save the clip instead.')
+    }
+  }
+
   return (
     <main className="safe-x safe-top mx-auto flex w-full max-w-3xl flex-1 flex-col gap-5 pb-6">
       <header className="flex items-center gap-2 pt-1">
@@ -145,15 +185,25 @@ export function Replay({ id }: { id: string }) {
         </video>
       )}
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {best && (
-          <button
-            type="button"
-            onClick={() => seek(best.start)}
-            className="col-span-2 flex min-h-12 items-center justify-center gap-2 rounded-xl bg-chalk px-4 font-semibold text-slate sm:col-span-1"
-          >
-            <Trophy size={20} aria-hidden="true" /> Best rally — {best.count}
-          </button>
+          <>
+            <button
+              type="button"
+              onClick={() => seek(best.start)}
+              className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-chalk px-4 font-semibold text-slate"
+            >
+              <Trophy size={20} aria-hidden="true" /> Best rally — {best.count}
+            </button>
+            <button
+              type="button"
+              onClick={() => void cutRally(best)}
+              disabled={!blob || cutting}
+              className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-slate-2 px-4 font-semibold disabled:text-chalk-faint"
+            >
+              <Share2 size={20} aria-hidden="true" /> Share this rally
+            </button>
+          </>
         )}
         <button
           type="button"
@@ -173,6 +223,27 @@ export function Replay({ id }: { id: string }) {
           </a>
         )}
       </div>
+      {clip && (
+        <section aria-label="Rally clip" className="flex flex-wrap items-center gap-2">
+          <p className="flex-1 font-semibold">{clip.label} — clip ready</p>
+          {navigator.canShare?.({ files: [clip.file] }) && (
+            <button
+              type="button"
+              onClick={() => void shareClip()}
+              className="flex min-h-12 items-center gap-2 rounded-xl bg-chalk px-4 font-semibold text-slate"
+            >
+              <Share2 size={20} aria-hidden="true" /> Share the clip
+            </button>
+          )}
+          <a
+            href={clip.url}
+            download={clip.file.name}
+            className="flex min-h-12 items-center gap-2 rounded-xl bg-slate-2 px-4 font-semibold text-chalk no-underline"
+          >
+            <Download size={20} aria-hidden="true" /> Save the clip
+          </a>
+        </section>
+      )}
       {message && <output className="text-chalk-dim">{message}</output>}
 
       <section aria-labelledby="chapters-h" className="flex flex-col gap-2">
@@ -184,12 +255,12 @@ export function Replay({ id }: { id: string }) {
         ) : (
           <ol className="border-t border-rule">
             {marks.map((c) => (
-              <li key={c.index} className="border-b border-rule">
+              <li key={c.index} className="flex border-b border-rule">
                 <button
                   type="button"
                   onClick={() => seek(c.start)}
                   aria-label={`Jump to rally ${c.index + 1}, ${c.count} ${preset.unit}, at ${clock(c.start)}`}
-                  className="flex min-h-12 w-full items-center gap-4 text-left hover:bg-slate-2"
+                  className="flex min-h-12 flex-1 items-center gap-4 text-left hover:bg-slate-2"
                 >
                   <span className="figures w-10 text-xl text-chalk-dim">{c.index + 1}</span>
                   <span
@@ -202,6 +273,15 @@ export function Replay({ id }: { id: string }) {
                     <Play size={14} className="mr-1 inline" aria-hidden="true" />
                     {clock(c.start)}
                   </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void cutRally(c)}
+                  disabled={!blob || cutting}
+                  aria-label={`Share rally ${c.index + 1}`}
+                  className="grid size-12 shrink-0 place-items-center border-l border-rule text-chalk-dim hover:bg-slate-2 hover:text-chalk disabled:text-chalk-faint"
+                >
+                  <Share2 size={18} aria-hidden="true" />
                 </button>
               </li>
             ))}

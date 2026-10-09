@@ -1,6 +1,7 @@
 // What the coach says out loud. Short, so it is over before the next serve.
 
 import { other, type MatchView, type ScoringRules } from '../engine/scoring/index.ts'
+import { capital } from '../ui/format.ts'
 
 export interface RallyCall {
   count: number
@@ -23,7 +24,6 @@ const TENNIS_WORDS: Record<string, string> = {
   '30': 'thirty',
   '40': 'forty',
 }
-const capital = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 
 export function matchPhrase(
   view: MatchView,

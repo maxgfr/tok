@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, test } from 'vitest'
 import { steady, synth } from '../test/synth.ts'
 import { calibrateThreshold, OnsetDetector, type Onset } from './onset.ts'
@@ -78,6 +79,38 @@ describe('OnsetDetector', () => {
       expect(o.confidence).toBeGreaterThan(0)
       expect(o.confidence).toBeLessThanOrEqual(1)
     }
+  })
+
+  test('spoken syllables are not counted', () => {
+    const speech = steady(6, 1, 0.8).map(({ at }) => ({ at, gain: 0.6 }))
+    expect(detect(synth({ sampleRate: SR, seconds: 6, toks: [], speech }))).toEqual([])
+  })
+
+  test('with the voice filter off, the same syllables would count', () => {
+    const speech = steady(6, 1, 0.8).map(({ at }) => ({ at, gain: 0.6 }))
+    const signal = synth({ sampleRate: SR, seconds: 6, toks: [], speech })
+    expect(detect(signal, { voiceFilter: false }).length).toBeGreaterThanOrEqual(4)
+  })
+
+  test('hits still count next to talking', () => {
+    const toks = steady(8, 1, 0.8)
+    const speech = toks.map(({ at }) => ({ at: at + 0.35, gain: 0.6 }))
+    const onsets = detect(synth({ sampleRate: SR, seconds: 8, toks, speech }))
+    expect(onsets).toHaveLength(8)
+    onsets.forEach((o, i) => expect(Math.abs(o.t - toks[i]!.at)).toBeLessThan(0.015))
+  })
+
+  test('counts the sounds it set aside as voice', () => {
+    const det = new OnsetDetector({ sampleRate: SR, bandHz: [1500, 6000], refractoryMs: 120 })
+    const speech = steady(3, 1, 0.8).map(({ at }) => ({ at, gain: 0.6 }))
+    const signal = synth({ sampleRate: SR, seconds: 4, toks: [], speech })
+    for (let i = 0; i < signal.length; i += 128) det.push(signal.subarray(i, i + 128))
+    expect(det.rejected).toBeGreaterThanOrEqual(3)
+  })
+
+  test('nothing fired: the same empty array, no allocation', () => {
+    const det = new OnsetDetector({ sampleRate: SR, bandHz: [1500, 6000], refractoryMs: 120 })
+    expect(det.push(new Float32Array(128))).toBe(det.push(new Float32Array(128)))
   })
 
   test('reports a level frame for the live graph', () => {

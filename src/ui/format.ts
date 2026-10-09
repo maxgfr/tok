@@ -31,5 +31,8 @@ export function clock(seconds: number): string {
   return h ? `${h}:${String(m).padStart(2, '0')}:${ss}` : `${m}:${ss}`
 }
 
+/** First letter upper-cased: "hits" → "Hits". */
+export const capital = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1)
+
 /** "1 rally", "3 rallies" — counts read as words do. */
 export const plural = (n: number, one: string, many: string): string => (n === 1 ? one : many)

@@ -104,7 +104,6 @@ export default defineConfig({
     VitePWA({
       registerType: 'prompt',
       injectRegister: null,
-      includeAssets: ['favicon.svg', 'apple-touch-icon-180x180.png'],
       manifest: {
         name: 'tok — rally & score counter',
         short_name: 'tok',
@@ -131,16 +130,17 @@ export default defineConfig({
         ],
       },
       workbox: {
-        // The vision model and its wasm runtime (public/models) are several MB
-        // and only needed by people who turn the camera on — they are cached on
-        // first use instead of being forced on every install.
+        // The vision model, its wasm runtime (public/models) and the worker that
+        // runs them are several MB and only needed by people who turn the camera
+        // on — they are cached on first use instead of being forced on every install.
         globPatterns: ['**/*.{js,css,html,svg,png,ico,txt,woff2,webmanifest}'],
-        globIgnores: ['models/**'],
+        globIgnores: ['models/**', '**/vision.worker-*.js'],
         navigateFallback: `${BASE}index.html`,
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
         runtimeCaching: [
           {
-            urlPattern: ({ url }) => url.pathname.startsWith(`${BASE}models/`),
+            urlPattern: ({ url }) =>
+              url.pathname.startsWith(`${BASE}models/`) || /vision\.worker-/.test(url.pathname),
             handler: 'CacheFirst',
             options: { cacheName: 'tok-models' },
           },

@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, test } from 'vitest'
 import { rng } from '../test/synth.ts'
 import { BallTracker, type BallObservation, type TrackerEvent } from './ballTrack.ts'

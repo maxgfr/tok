@@ -1,13 +1,20 @@
 name: CI
 
+# One pipeline: build once, run the end-to-end tests on that build, and deploy
+# that same build to GitHub Pages only once everything is green.
+
 on:
   push:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # A newer push supersedes a branch run, but never cuts a deploy short.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   verify:
@@ -45,8 +52,16 @@ jobs:
       - name: Privacy gate
         run: pnpm check:network
 
+      - name: Keep the build
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist
+          retention-days: 1
+
   e2e:
     name: End-to-end (Chromium, fake microphone)
+    needs: verify
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -60,6 +75,22 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # The build the gates passed, not a new one.
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      - name: Playwright version
+        id: playwright
+        run: echo "version=$(pnpm exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+
+      # Fast when the browser is cached; the system libraries are installed either way.
       - run: pnpm exec playwright install --with-deps chromium
 
       - name: Count hits from reference recordings
@@ -72,3 +103,34 @@ jobs:
           name: e2e-results
           path: test-results
           retention-days: 7
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: [verify, e2e]
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    # Never cancel a deploy in flight; queue behind it instead.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+      - id: deployment
+        uses: actions/deploy-pages@v4

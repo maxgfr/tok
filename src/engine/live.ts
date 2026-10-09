@@ -22,7 +22,11 @@ export interface LiveState {
 }
 
 export type LiveAction =
-  RallyEvent | { type: 'point'; side: Side; t: number } | { type: 'undoPoint' }
+  | RallyEvent
+  | { type: 'point'; side: Side; t: number }
+  | { type: 'undoPoint' }
+  /** Throw away the rally in progress: the count goes back to 0, nothing is kept. */
+  | { type: 'discard' }
 
 export const initialLive = (): LiveState => ({
   rally: idleRally(),
@@ -90,6 +94,8 @@ export function liveStep(state: LiveState, action: LiveAction, cfg: RallyConfig)
       }
       return { ...withRallies(state, rallies, state.rally), lastEnded: state.lastEnded }
     }
+    case 'discard':
+      return { ...state, rally: idleRally(), lastEnded: null }
     default: {
       const { state: rally, ended } = rallyStep(state.rally, action, cfg)
       if (ended) return withRallies(state, [...state.rallies, ended], rally)

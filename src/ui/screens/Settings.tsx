@@ -12,7 +12,7 @@ import { SPORTS, type SportId } from '../../engine/sports.ts'
 import { canSpeak } from '../../device/speech.ts'
 import { Toggle } from '../components/Toggle.tsx'
 import { loadCoach, loadGoal, saveCoach, saveGoal, type CoachSettings } from '../coach.ts'
-import { fmtBytes } from '../format.ts'
+import { fmtBytes, plural } from '../format.ts'
 
 export function Settings() {
   const [estimate, setEstimate] = useState<{ usage: number; quota: number } | null>(null)
@@ -61,14 +61,16 @@ export function Settings() {
     a.download = `tok-backup-${data.exportedAt.slice(0, 10)}.json`
     a.click()
     URL.revokeObjectURL(url)
-    setMessage(`Saved ${data.sessions.length} sessions to a file.`)
+    setMessage(
+      `Saved ${data.sessions.length} ${plural(data.sessions.length, 'session', 'sessions')} to a file.`,
+    )
   }
 
   const doImport = async (file: File) => {
     try {
       const { sessions, skipped } = await importAll(JSON.parse(await file.text()))
       setMessage(
-        `Restored ${sessions} sessions.${skipped ? ` Skipped ${skipped} this version cannot read.` : ''}`,
+        `Restored ${sessions} ${plural(sessions, 'session', 'sessions')}.${skipped ? ` Skipped ${skipped} this version cannot read.` : ''}`,
       )
       refresh()
     } catch (error) {

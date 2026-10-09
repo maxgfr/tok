@@ -4,7 +4,7 @@ import type { RallyConfig } from '../../engine/rally.ts'
 import { replay, type MatchView, type Side } from '../../engine/scoring/index.ts'
 import { sport, type SportPreset } from '../../engine/sports.ts'
 import { judgeRally } from '../../engine/judge.ts'
-import { countHits, summarize } from '../../engine/stats.ts'
+import { countHits, summarize, type Summary } from '../../engine/stats.ts'
 import type { Hit, Rally, SensorKind } from '../../engine/types.ts'
 import { buzz } from '../../device/haptics.ts'
 import { listSessions, saveSession, type SessionRecord } from '../../store/db.ts'
@@ -36,13 +36,14 @@ export interface LiveSession {
   /** The player's goal for this sport, 0 when none. */
   goal: number
   verdict: RallyVerdict | null
-  sensors: SensorKind[]
   dispatch: (action: LiveAction) => void
   tap: () => void
   /** A hit picked up by the sensors (already fused). */
   sense: (hit: Hit) => void
   undoHit: () => void
   endRally: () => void
+  /** Throws the rally in progress away: back to 0, nothing recorded. */
+  restartRally: () => void
   point: (side: Side) => void
   undoPoint: () => void
   finish: (extra?: Partial<SessionRecord>) => Promise<string | null>
@@ -69,8 +70,8 @@ export function useLiveSession(config: LiveConfig, sensors: SensorKind[]): LiveS
   )
   const [id] = useState(() => crypto.randomUUID())
   const [startedAt] = useState(() => Date.now())
-  const [openedAt] = useState(() => Date.now())
-  const [history, setHistory] = useState<SessionRecord[]>([])
+  // Every earlier session, boiled down to the numbers a verdict needs.
+  const [before, setBefore] = useState<Summary>({ best: 0, todayBest: 0, average: 0, rallies: 0 })
   const [verdict, setVerdict] = useState<RallyVerdict | null>(null)
   const savedOnce = useRef(false)
   // Once finish() has started, it owns the last write.
@@ -89,29 +90,46 @@ export function useLiveSession(config: LiveConfig, sensors: SensorKind[]): LiveS
   useEffect(() => {
     let alive = true
     void listSessions().then((all) => {
-      if (alive) setHistory(all.filter((s) => s.id !== id))
+      if (!alive) return
+      const earlier = all.filter((s) => s.id !== id)
+      setBefore(summarize(earlier, config.sportId, preset.soundsPerHit, startedAt))
     })
     return () => {
       alive = false
     }
-  }, [id])
+  }, [id, config.sportId, preset.soundsPerHit, startedAt])
 
-  // The clock drives rally timeouts.
+  // The clock drives rally timeouts: one timer, armed for the moment the rally
+  // in progress would time out. Nothing runs between rallies.
+  const lastHitAt = state.rally.phase === 'rally' ? state.rally.hits.at(-1)?.t : undefined
+  const { timeoutMs } = rallyConfig
   useEffect(() => {
-    const timer = window.setInterval(() => dispatch({ type: 'tick', t: now() }), 200)
-    return () => window.clearInterval(timer)
-  }, [])
+    if (lastHitAt === undefined) return
+    let timer = 0
+    const arm = () => {
+      const wait = Math.max(20, lastHitAt + timeoutMs - now() + 20)
+      timer = window.setTimeout(() => {
+        dispatch({ type: 'tick', t: now() })
+        // Still open (the clock moved back): look again.
+        arm()
+      }, wait)
+    }
+    arm()
+    return () => window.clearTimeout(timer)
+  }, [lastHitAt, timeoutMs])
 
-  const before = useMemo(
-    () => summarize(history, config.sportId, preset.soundsPerHit, openedAt),
-    [history, config.sportId, preset.soundsPerHit, openedAt],
-  )
-
-  const sessionBest = useMemo(() => {
-    let best = 0
-    for (const r of state.rallies) best = Math.max(best, countHits(r.hits, preset.soundsPerHit))
-    return best
-  }, [state.rallies, preset.soundsPerHit])
+  // The session's best, and its best before the rally that just ended (what
+  // that rally is judged against): one pass over the rallies.
+  const { sessionBest, earlierBest } = useMemo(() => {
+    let earlier = 0
+    let last = 0
+    for (const r of state.rallies) {
+      const n = countHits(r.hits, preset.soundsPerHit)
+      if (r === state.lastEnded) last = n
+      else earlier = Math.max(earlier, n)
+    }
+    return { sessionBest: Math.max(earlier, last), earlierBest: earlier }
+  }, [state.rallies, state.lastEnded, preset.soundsPerHit])
 
   // Judge each rally as it ends.
   const judged = useRef<Rally | null>(null)
@@ -120,10 +138,6 @@ export function useLiveSession(config: LiveConfig, sensors: SensorKind[]): LiveS
     if (!rally || judged.current === rally) return
     judged.current = rally
     const count = countHits(rally.hits, preset.soundsPerHit)
-    const earlier = state.rallies.filter((r) => r !== rally)
-    let earlierBest = 0
-    for (const r of earlier)
-      earlierBest = Math.max(earlierBest, countHits(r.hits, preset.soundsPerHit))
     const judgement = judgeRally(count, {
       best: before.best,
       todayBest: before.todayBest,
@@ -132,7 +146,7 @@ export function useLiveSession(config: LiveConfig, sensors: SensorKind[]): LiveS
     })
     setVerdict({ rally, count, ...judgement })
     buzz(judgement.record || judgement.goal ? [40, 60, 40, 60, 120] : [30, 50, 30])
-  }, [state.lastEnded, state.rallies, before, preset.soundsPerHit, goal])
+  }, [state.lastEnded, earlierBest, before, preset.soundsPerHit, goal])
 
   const record = useCallback(
     (endedAt: number | null, rallies: Rally[]): SessionRecord => ({
@@ -211,12 +225,15 @@ export function useLiveSession(config: LiveConfig, sensors: SensorKind[]): LiveS
     todayBest: Math.max(before.todayBest, sessionBest),
     goal,
     verdict: inRally ? null : verdict,
-    sensors,
     dispatch,
     tap,
     sense,
     undoHit: () => dispatch({ type: 'undo' }),
     endRally: () => dispatch({ type: 'end', t: now(), reason: 'manual' }),
+    restartRally: () => {
+      setVerdict(null)
+      dispatch({ type: 'discard' })
+    },
     point: (side: Side) => {
       setVerdict(null)
       dispatch({ type: 'point', side, t: now() })

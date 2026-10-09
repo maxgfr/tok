@@ -9,7 +9,10 @@ import { lockToOrigin } from './networkLock.ts'
 lockToOrigin(self as unknown as Parameters<typeof lockToOrigin>[0])
 
 export type VisionRequest =
-  { type: 'init'; base: string } | { type: 'frame'; bitmap: ImageBitmap; t: number }
+  | { type: 'init'; base: string }
+  /** A new run of frames: forget the last one. */
+  | { type: 'reset' }
+  | { type: 'frame'; bitmap: ImageBitmap; t: number }
 
 export type VisionReply =
   | { type: 'ready'; mode: 'mediapipe' | 'motion' }
@@ -43,27 +46,32 @@ async function init(base: string): Promise<void> {
 // -- Fallback: frame difference on a tiny grayscale copy ----------------------
 const W = 96
 const H = 54
-let canvas: OffscreenCanvas | null = null
-let previous: Uint8ClampedArray | null = null
+let ctx: OffscreenCanvasRenderingContext2D | null = null
+// Two grayscale frames, swapped: this one and the one before.
+let gray = new Uint8ClampedArray(W * H)
+let previous = new Uint8ClampedArray(W * H)
+let hasPrevious = false
 
 function motionBall(bitmap: ImageBitmap) {
-  canvas ??= new OffscreenCanvas(W, H)
-  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  ctx ??= new OffscreenCanvas(W, H).getContext('2d', { willReadFrequently: true })
   if (!ctx) return null
   ctx.drawImage(bitmap, 0, 0, W, H)
   const { data } = ctx.getImageData(0, 0, W, H)
-  const gray = new Uint8ClampedArray(W * H)
-  for (let i = 0; i < W * H; i += 1) {
-    gray[i] = (data[i * 4]! * 3 + data[i * 4 + 1]! * 6 + data[i * 4 + 2]!) / 10
-  }
   const before = previous
   previous = gray
-  if (!before) return null
+  gray = before
+  const current = previous
+  for (let i = 0; i < W * H; i += 1) {
+    current[i] = (data[i * 4]! * 3 + data[i * 4 + 1]! * 6 + data[i * 4 + 2]!) / 10
+  }
+  const compare = hasPrevious
+  hasPrevious = true
+  if (!compare) return null
   let n = 0
   let sx = 0
   let sy = 0
   for (let i = 0; i < W * H; i += 1) {
-    if (Math.abs(gray[i]! - before[i]!) > 40) {
+    if (Math.abs(current[i]! - before[i]!) > 40) {
       n += 1
       sx += i % W
       sy += Math.floor(i / W)
@@ -77,6 +85,10 @@ function motionBall(bitmap: ImageBitmap) {
 self.onmessage = async (event: MessageEvent<VisionRequest>) => {
   const m = event.data
   if (m.type === 'init') return init(m.base)
+  if (m.type === 'reset') {
+    hasPrevious = false
+    return
+  }
   let ball: { x: number; y: number; score: number } | null = null
   try {
     if (detector) {

@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, test } from 'vitest'
 import { rng } from '../test/synth.ts'
 import { MotionPeakDetector, type MotionSample } from './motionPeaks.ts'

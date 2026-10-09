@@ -1,21 +1,26 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { Minus, Moon, Square, Undo2, Video, VideoOff, X } from 'lucide-react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Minus, Moon, RotateCcw, Square, Undo2, Video, VideoOff, X } from 'lucide-react'
 import type { Side } from '../../engine/scoring/index.ts'
 import type { Hit } from '../../engine/types.ts'
 import { useWakeLock } from '../../device/wakeLock.ts'
 import { useCoach } from '../hooks/useCoach.ts'
 import { sport } from '../../engine/sports.ts'
 import { Count } from '../components/Count.tsx'
+import type { TracePoint } from '../components/LevelTrace.tsx'
 import { PocketMode } from '../components/PocketMode.tsx'
+import { SensitivityPanel } from '../components/SensitivityPanel.tsx'
 import { SensorChips } from '../components/SensorChips.tsx'
 import { Tally } from '../components/Tally.tsx'
 import type { LiveConfig } from '../config.ts'
 import { useLiveSession, type LiveSession } from '../hooks/useLiveSession.ts'
 import { useCamera } from '../hooks/useCamera.ts'
 import { useVision } from '../hooks/useVision.ts'
+import { useSensitivity } from '../hooks/useSensitivity.ts'
+import { useLatest } from '../hooks/useLatest.ts'
 import { useSensors } from '../hooks/useSensors.ts'
 import type { OverlayState } from '../../record/overlay.ts'
 import { deleteVideo } from '../../record/videoStore.ts'
+import { releaseVisionWorker } from '../../sensors/vision.ts'
 import { go } from '../router.ts'
 
 export function Live({ config }: { config: LiveConfig }) {
@@ -23,42 +28,62 @@ export function Live({ config }: { config: LiveConfig }) {
   const [confirmEnd, setConfirmEnd] = useState(false)
   const [pocket, setPocket] = useState(false)
   const [cameraOn, setCameraOn] = useState(false)
+  const [panelOpen, setPanelOpen] = useState(false)
+  const [rejected, setRejected] = useState(0)
+  // What the mic hears, for the sensitivity panel's trace.
+  const levels = useRef<TracePoint[]>([])
+  const onsets = useRef<number[]>([])
   const sensing = useRef<(hit: Hit) => void>(() => {})
   const sensors = useSensors({
     enabled: config.input === 'auto',
     preset,
-    onHit: (hit) => sensing.current(hit),
+    onHit: (hit) => {
+      sensing.current(hit)
+      onsets.current.push(hit.t)
+      if (onsets.current.length > 50) onsets.current.splice(0, onsets.current.length - 50)
+    },
+    onLevel: (l) => {
+      const buffer = levels.current
+      buffer.push({ t: l.t, flux: l.flux, threshold: l.threshold })
+      if (buffer.length > 600) buffer.splice(0, buffer.length - 600)
+      setRejected(l.rejected)
+    },
   })
+  const sens = useSensitivity(preset.id, {
+    onChange: ({ threshold, voiceFilter }) => {
+      sensors.setThreshold(threshold)
+      sensors.setVoiceFilter(voiceFilter)
+    },
+  })
+  const { setLevels } = sensors
+  useEffect(() => {
+    setLevels(panelOpen)
+  }, [panelOpen, setLevels])
   const session = useLiveSession(config, sensors.active)
   useLayoutEffect(() => {
     sensing.current = session.sense
   })
-  const overlay = useRef<() => OverlayState>(() => ({
-    title: preset.name,
-    unit: preset.unit,
-    count: 0,
-    best: 0,
-    match: null,
-  }))
-  useLayoutEffect(() => {
-    const m = session.match
-    const state: OverlayState = {
+  // A new object only when the score moves: the recording repaints its plate then.
+  const m = session.match
+  const overlay = useMemo<OverlayState>(
+    () => ({
       title: preset.name,
       unit: preset.unit,
       count: session.count,
       best: session.best,
       match: m ? { names: config.names, points: m.current, sets: m.setsWon } : null,
-    }
-    overlay.current = () => state
-  })
+    }),
+    [preset, session.count, session.best, m, config.names],
+  )
   const {
     video: cameraVideo,
     status: cameraStatus,
     stop: stopCamera,
+    markRally,
   } = useCamera({
     enabled: cameraOn,
     name: session.id,
-    overlay: () => overlay.current(),
+    overlay,
     audioTrack: sensors.audioTrack,
   })
   const vision = useVision({
@@ -68,6 +93,12 @@ export function Live({ config }: { config: LiveConfig }) {
     onCandidate: sensors.feed,
     onGround: (t) => session.dispatch({ type: 'end', t, reason: 'ground' }),
   })
+  // Each rally opens on a key frame: replays and clips can cut exactly there.
+  useEffect(() => {
+    if (session.inRally) markRally()
+  }, [session.inRally, markRally])
+  // The model stays loaded while the camera goes on and off; leaving frees it.
+  useEffect(() => releaseVisionWorker, [])
   const [usedVision, setUsedVision] = useState(false)
   if (vision === 'on' && !usedVision) setUsedVision(true)
   useWakeLock()
@@ -90,15 +121,12 @@ export function Live({ config }: { config: LiveConfig }) {
     if (!id) await Promise.all(videos.map(deleteVideo))
     return id
   }
-  const closeRef = useRef(close)
-  useLayoutEffect(() => {
-    closeRef.current = close
-  })
+  const closeRef = useLatest(close)
   useEffect(
     () => () => {
       if (!ended.current) void closeRef.current()
     },
-    [],
+    [closeRef],
   )
 
   const end = async () => {
@@ -167,6 +195,7 @@ export function Live({ config }: { config: LiveConfig }) {
             <SensorChips
               status={{ ...sensors.status, ...(vision !== 'off' ? { vision } : {}) }}
               dominant={preset.dominant}
+              onAudio={() => setPanelOpen(true)}
             />
             <button
               type="button"
@@ -206,6 +235,20 @@ export function Live({ config }: { config: LiveConfig }) {
         <RallyBoard session={session} bright={cameraOn} />
       )}
       {pocket && <PocketMode onUnlock={() => setPocket(false)} />}
+      {panelOpen && (
+        <SensitivityPanel
+          sportName={preset.name}
+          sensitivity={sens.sensitivity}
+          voiceFilter={sens.voiceFilter}
+          levels={levels}
+          onsets={onsets}
+          rejected={rejected}
+          onSensitivity={(v) => void sens.setSensitivity(v)}
+          onVoiceFilter={(on) => void sens.setVoiceFilter(on)}
+          onReset={() => void sens.reset()}
+          onClose={() => setPanelOpen(false)}
+        />
+      )}
     </div>
   )
 }
@@ -278,6 +321,7 @@ function RallyBoard({ session, bright }: { session: LiveSession; bright: boolean
                 label="Goal"
                 value={session.goal}
                 tone={session.todayBest >= session.goal ? 'text-best' : 'text-chalk'}
+                bright={bright}
               />
             ) : (
               <Stat
@@ -288,7 +332,7 @@ function RallyBoard({ session, bright }: { session: LiveSession; bright: boolean
               />
             )}
           </dl>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-3">
             <button
               type="button"
               onClick={session.undoHit}
@@ -296,6 +340,14 @@ function RallyBoard({ session, bright }: { session: LiveSession; bright: boolean
               className="flex min-h-14 items-center justify-center gap-2 rounded-xl bg-slate-2 text-lg font-semibold disabled:text-chalk-faint"
             >
               <Minus size={22} aria-hidden="true" /> Undo hit
+            </button>
+            <button
+              type="button"
+              onClick={session.restartRally}
+              disabled={!session.inRally}
+              className="flex min-h-14 items-center justify-center gap-2 rounded-xl bg-slate-2 text-lg font-semibold disabled:text-chalk-faint"
+            >
+              <RotateCcw size={20} aria-hidden="true" /> Restart
             </button>
             <button
               type="button"

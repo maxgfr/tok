@@ -2,8 +2,6 @@ import { useState } from 'react'
 
 interface Props {
   counts: number[]
-  /** Fixed y-scale top, so sessions compare at a glance. */
-  max?: number
   label: string
 }
 
@@ -11,10 +9,10 @@ const H = 120
 const GAP = 2
 
 /** One bar per rally, oldest first; the longest is drawn in best-yellow. */
-export function RallyBars({ counts, max, label }: Props) {
+export function RallyBars({ counts, label }: Props) {
   const [hover, setHover] = useState<number | null>(null)
   if (counts.length === 0) return null
-  const top = Math.max(1, max ?? 0, ...counts)
+  const top = Math.max(1, ...counts)
   const best = Math.max(...counts)
   const w = Math.max(4, Math.min(28, 640 / counts.length))
   // Few rallies stay narrow bars on the left instead of stretching to fill.

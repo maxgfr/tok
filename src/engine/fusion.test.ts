@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, test } from 'vitest'
 import { Fusion } from './fusion.ts'
 import type { HitCandidate, SensorKind } from './types.ts'

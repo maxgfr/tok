@@ -1,10 +1,11 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { matchPhrase, rallyPhrase } from '../../device/phrases.ts'
 import { startRemote } from '../../device/remote.ts'
 import { speak } from '../../device/speech.ts'
 import { matchPoints } from '../../engine/live.ts'
 import { loadCoach, type CoachSettings } from '../coach.ts'
 import type { LiveConfig } from '../config.ts'
+import { useLatest } from './useLatest.ts'
 import type { LiveSession } from './useLiveSession.ts'
 
 /** The coach's voice and the optional Bluetooth remote, for one live session. */
@@ -14,17 +15,14 @@ export function useCoach(config: LiveConfig, session: LiveSession): void {
     void loadCoach().then(setCoach)
   }, [])
 
-  const latest = useRef(session)
-  useLayoutEffect(() => {
-    latest.current = session
-  })
+  const latest = useLatest(session)
 
   // Rally mode: call each finished rally.
   const { verdict } = session
   useEffect(() => {
     if (!coach?.voice || !verdict || config.mode !== 'rally') return
     speak(rallyPhrase(verdict, latest.current.todayBest))
-  }, [verdict, coach?.voice, config.mode])
+  }, [verdict, coach?.voice, config.mode, latest])
 
   // Match mode: call the score after every point.
   const points = matchPoints(session.rallies).length
@@ -32,7 +30,7 @@ export function useCoach(config: LiveConfig, session: LiveSession): void {
     const { match, preset } = latest.current
     if (!coach?.voice || !match || !preset.scoring || points === 0) return
     speak(matchPhrase(match, config.names, preset.scoring))
-  }, [points, coach?.voice, config.names])
+  }, [points, coach?.voice, config.names, latest])
 
   // Earbuds / remote: play-pause, next, previous.
   useEffect(() => {
@@ -47,5 +45,5 @@ export function useCoach(config: LiveConfig, session: LiveSession): void {
       `tok — ${latest.current.preset.name}`,
     )
     return remote.stop
-  }, [coach?.remote, config.mode])
+  }, [coach?.remote, config.mode, latest])
 }

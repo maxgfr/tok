@@ -1,19 +1,18 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Mic } from 'lucide-react'
 import { calibrateThreshold } from '../../engine/onset.ts'
 import { SPORTS, sport, type SportId } from '../../engine/sports.ts'
-import { primeAudio } from '../../sensors/audio.ts'
+import { primeAudio } from '../../sensors/prime.ts'
 import { Count } from '../components/Count.tsx'
 import { LevelTrace, type TracePoint } from '../components/LevelTrace.tsx'
 import { SensorChips } from '../components/SensorChips.tsx'
 import { loadConfig } from '../config.ts'
-import { useSensors, type ScoredCandidate } from '../hooks/useSensors.ts'
-import {
-  loadThreshold,
-  saveThreshold,
-  sensitivityToThreshold,
-  thresholdToSensitivity,
-} from '../thresholds.ts'
+import { Toggle } from '../components/Toggle.tsx'
+import { plural } from '../format.ts'
+import { useLatest } from '../hooks/useLatest.ts'
+import { useSensitivity } from '../hooks/useSensitivity.ts'
+import { useSensors } from '../hooks/useSensors.ts'
+import { thresholdToSensitivity } from '../thresholds.ts'
 
 const TEST_HITS = 10
 /** Calibration listens far more eagerly than play, then sets the bar. */
@@ -28,60 +27,60 @@ type Calibration =
 export function Lab() {
   const [sportId, setSportId] = useState<SportId | null>(null)
   const [listening, setListening] = useState(false)
-  const [threshold, setThreshold] = useState<number | null>(null)
   const [heard, setHeard] = useState(0)
+  const [rejected, setRejected] = useState(0)
   const [calibration, setCalibration] = useState<Calibration>({ phase: 'idle' })
   const levels = useRef<TracePoint[]>([])
   const onsets = useRef<number[]>([])
-  const calibrating = useRef<Calibration>(calibration)
-  useLayoutEffect(() => {
-    calibrating.current = calibration
-  })
+  const calibrating = useLatest(calibration)
 
   useEffect(() => {
     void loadConfig().then((c) => setSportId(c.sportId))
   }, [])
-  useEffect(() => {
-    if (sportId) void loadThreshold(sportId).then(setThreshold)
-  }, [sportId])
 
   const preset = sportId ? sport(sportId) : SPORTS[0]!
-  const onCandidate = (c: ScoredCandidate) => {
-    const cal = calibrating.current
-    if (cal.phase === 'listening') {
+  const count = (t: number) => {
+    onsets.current.push(t)
+    if (onsets.current.length > 50) onsets.current.splice(0, onsets.current.length - 50)
+    setHeard((n) => n + 1)
+  }
+  // The mic runs exactly as in a session: the sport's stored threshold and
+  // voice filter, fused hits counted. Only calibration reads raw scores.
+  const sensors = useSensors({
+    enabled: listening,
+    preset,
+    use: ['audio'],
+    levels: true,
+    onCandidate: (c) => {
+      if (calibrating.current.phase !== 'listening') return
       setCalibration((prev) =>
         prev.phase === 'listening'
           ? { ...prev, scores: [...prev.scores, c.score ?? 0], last: c.t }
           : prev,
       )
-      onsets.current.push(c.t)
-      setHeard((n) => n + 1)
-      return
-    }
-    if (threshold !== null && (c.score ?? Infinity) < threshold) return
-    onsets.current.push(c.t)
-    setHeard((n) => n + 1)
-  }
-  const sensors = useSensors({
-    enabled: listening && threshold !== null,
-    preset,
-    // The worklet listens at the calibration level; play-level filtering
-    // happens above, so the slider moves the bar without restarting the mic.
-    threshold: CALIBRATION_THRESHOLD,
-    use: ['audio'],
-    onCandidate,
+      count(c.t)
+    },
+    onHit: (hit) => {
+      if (calibrating.current.phase !== 'listening') count(hit.t)
+    },
     onLevel: (l) => {
-      // Draw the bar the player set, not the eager one calibration listens at.
       const buffer = levels.current
-      const bar = threshold ?? CALIBRATION_THRESHOLD
-      buffer.push({ t: l.t, flux: l.flux, threshold: l.median + bar * l.spread })
+      buffer.push({ t: l.t, flux: l.flux, threshold: l.threshold })
       if (buffer.length > 600) buffer.splice(0, buffer.length - 600)
+      setRejected(l.rejected)
+    },
+  })
+  const sens = useSensitivity(preset.id, {
+    onChange: ({ threshold, voiceFilter }) => {
+      // Calibration keeps listening at its own eager level until it is done.
+      if (calibrating.current.phase !== 'listening') sensors.setThreshold(threshold)
+      sensors.setVoiceFilter(voiceFilter)
     },
   })
 
   const finishCalibration = () => {
     const cal = calibrating.current
-    if (cal.phase !== 'listening' || !sportId) return
+    if (cal.phase !== 'listening') return
     const value = calibrateThreshold(cal.scores, TEST_HITS)
     if (cal.scores.length < TEST_HITS || value === null) {
       setCalibration({
@@ -89,10 +88,12 @@ export function Lab() {
         good: false,
         message: `Only heard ${cal.scores.length} of ${TEST_HITS}. Move the phone closer, or hit a bit harder, and try again.`,
       })
+      if (sens.threshold !== null) sensors.setThreshold(sens.threshold)
       return
     }
-    setThreshold(value)
-    void saveThreshold(sportId, value)
+    // Still 'listening' here, so the mic is told directly.
+    sensors.setThreshold(value)
+    void sens.setThreshold(value)
     setCalibration({
       phase: 'done',
       good: true,
@@ -112,8 +113,6 @@ export function Lab() {
     primeAudio()
     setListening(true)
   }
-
-  const sensitivity = threshold === null ? 50 : thresholdToSensitivity(threshold)
 
   return (
     <main className="safe-x safe-top mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 pb-6">
@@ -140,6 +139,7 @@ export function Lab() {
           ))}
         </select>
       </label>
+      <p className="-mt-4 text-sm text-chalk-dim">Used in every {preset.name} session.</p>
 
       {!listening ? (
         <button
@@ -175,7 +175,7 @@ export function Lab() {
                 Sensitivity
               </h2>
               <output htmlFor="sensitivity" className="figures text-3xl font-extrabold">
-                {sensitivity}
+                {sens.sensitivity}
               </output>
             </div>
             <input
@@ -183,18 +183,20 @@ export function Lab() {
               type="range"
               min={0}
               max={100}
-              value={sensitivity}
+              value={sens.sensitivity}
               aria-labelledby="sens-h"
-              onChange={(e) => {
-                const value = sensitivityToThreshold(Number(e.target.value))
-                setThreshold(value)
-                if (sportId) void saveThreshold(sportId, value)
-              }}
+              onChange={(e) => void sens.setSensitivity(Number(e.target.value))}
               className="h-11 w-full"
             />
             <p className="text-sm text-chalk-dim">
               Missing hits? Slide right. Counting footsteps and chatter? Slide left.
             </p>
+            <Toggle
+              label="Ignore voices"
+              hint={`${rejected} ${plural(rejected, 'sound', 'sounds')} ignored as voice`}
+              checked={sens.voiceFilter}
+              onChange={(on) => void sens.setVoiceFilter(on)}
+            />
           </section>
 
           <section aria-labelledby="cal-h" className="flex flex-col gap-3">
@@ -233,6 +235,7 @@ export function Lab() {
                   onClick={() => {
                     onsets.current = []
                     setHeard(0)
+                    sensors.setThreshold(CALIBRATION_THRESHOLD)
                     setCalibration({ phase: 'listening', scores: [], last: null })
                   }}
                   className="min-h-12 self-start rounded-xl bg-chalk px-5 font-semibold text-slate"

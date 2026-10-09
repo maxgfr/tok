@@ -23,3 +23,9 @@ test('new strokes draw themselves', () => {
   expect(lines).toHaveLength(3)
   expect((lines[0] as SVGElement).style.animation).toMatch(/stroke-in/)
 })
+
+test('a restarted rally is struck through', () => {
+  const { container, rerender } = render(<Tally count={5} />)
+  rerender(<Tally count={0} />)
+  expect(container.querySelectorAll('line[stroke="var(--color-side-b)"]')).toHaveLength(5)
+})

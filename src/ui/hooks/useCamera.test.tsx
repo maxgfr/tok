@@ -16,7 +16,7 @@ test('switching the camera off while it starts still releases it', async () => {
       useCamera({
         enabled,
         name: 's',
-        overlay: () => ({ title: '', unit: '', count: 0, best: 0, match: null }),
+        overlay: { title: '', unit: '', count: 0, best: 0, match: null },
         audioTrack: () => null,
       }),
     { initialProps: { enabled: true } },

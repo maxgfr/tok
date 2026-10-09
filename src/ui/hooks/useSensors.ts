@@ -1,11 +1,13 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Fusion } from '../../engine/fusion.ts'
 import type { AutoSensor, SportPreset } from '../../engine/sports.ts'
 import type { Hit, HitCandidate, SensorKind } from '../../engine/types.ts'
 import { startAudio, type AudioSensor, type TimedLevel } from '../../sensors/audio.ts'
 import { startMotion } from '../../sensors/motion.ts'
 import { isSpeaking } from '../../device/speech.ts'
-import { loadThreshold } from '../thresholds.ts'
+import { loadThreshold, loadVoiceFilter } from '../thresholds.ts'
+import { failure } from './sensorStatus.ts'
+import { useLatest } from './useLatest.ts'
 
 export type SensorStatus = 'off' | 'starting' | 'on' | 'blocked' | 'unavailable'
 
@@ -27,13 +29,10 @@ interface Options {
   onLevel?: (level: TimedLevel) => void
   /** Overrides the stored per-sport audio threshold (Lab). */
   threshold?: number
+  /** Post the mic level trace from the start (Lab); see `setLevels`. */
+  levels?: boolean
   /** Which sensors to try; defaults to every sensor the sport trusts. */
   use?: AutoSensor[]
-}
-
-const failure = (error: unknown): SensorStatus => {
-  const name = (error as DOMException | undefined)?.name
-  return name === 'NotAllowedError' || name === 'SecurityError' ? 'blocked' : 'unavailable'
 }
 
 /** Starts the sensors a session uses, fuses their candidates, reports what runs. */
@@ -44,15 +43,23 @@ export function useSensors({
   onCandidate,
   onLevel,
   threshold,
+  levels = false,
   use,
 }: Options) {
   const [audio, setAudio] = useState<SensorStatus>('off')
   const [motion, setMotion] = useState<SensorStatus>('off')
-  const handlers = useRef({ onHit, onCandidate, onLevel })
-  useLayoutEffect(() => {
-    handlers.current = { onHit, onCandidate, onLevel }
-  })
+  const handlers = useLatest({ onHit, onCandidate, onLevel })
   const audioSensor = useRef<AudioSensor | null>(null)
+  // Settings changed before the mic is up are applied when it starts.
+  const pushed = useRef<{ threshold?: number; voiceFilter?: boolean; levels?: boolean }>({})
+  useEffect(
+    () => () => {
+      // Another sport has its own stored settings.
+      delete pushed.current.threshold
+      delete pushed.current.voiceFilter
+    },
+    [preset],
+  )
   const wanted = use ?? (['audio', 'motion'] as AutoSensor[])
   const wantAudio = enabled && wanted.includes('audio') && preset.weights.audio > 0
   const wantMotion = enabled && wanted.includes('motion') && preset.weights.motion > 0
@@ -69,10 +76,7 @@ export function useSensors({
     const hit = fusion.current?.push(candidate)
     if (hit) handlers.current.onHit?.(hit)
   }
-  const feedRef = useRef(feed)
-  useLayoutEffect(() => {
-    feedRef.current = feed
-  })
+  const feedRef = useLatest(feed)
 
   useEffect(() => {
     if (!wantAudio) return
@@ -80,11 +84,16 @@ export function useSensors({
     setAudio('starting')
     void (async () => {
       try {
-        const k = threshold ?? (await loadThreshold(preset.id))
+        const [storedThreshold, storedVoiceFilter] = await Promise.all([
+          loadThreshold(preset.id),
+          loadVoiceFilter(preset.id),
+        ])
         const started = await startAudio({
           bandHz: preset.bandHz,
           refractoryMs: preset.refractoryMs,
-          threshold: k,
+          threshold: pushed.current.threshold ?? threshold ?? storedThreshold,
+          voiceFilter: pushed.current.voiceFilter ?? storedVoiceFilter,
+          levels: pushed.current.levels ?? levels,
           onCandidate: (c) => feedRef.current(c),
           onLevel: (l) => handlers.current.onLevel?.(l),
         })
@@ -140,7 +149,30 @@ export function useSensors({
       sensor?.stop()
       setMotion('off')
     }
-  }, [wantMotion, preset])
+  }, [wantMotion, preset, feedRef])
+
+  // Only refs inside: the same functions on every render, safe in effect deps.
+  const controls = useMemo(
+    () => ({
+      setThreshold: (value: number) => {
+        pushed.current.threshold = value
+        audioSensor.current?.setThreshold(value)
+      },
+      setVoiceFilter: (on: boolean) => {
+        pushed.current.voiceFilter = on
+        audioSensor.current?.setVoiceFilter(on)
+      },
+      /** Level trace on while something draws it: no messages otherwise. */
+      setLevels: (on: boolean) => {
+        pushed.current.levels = on
+        audioSensor.current?.setLevels(on)
+      },
+      audioTrack: () => audioSensor.current?.track ?? null,
+      /** Feeds a candidate from another sensor (vision) into the same fusion. */
+      feed: (candidate: ScoredCandidate) => feedRef.current(candidate),
+    }),
+    [feedRef],
+  )
 
   const active: SensorKind[] = ['manual']
   if (audio === 'on') active.push('audio')
@@ -148,12 +180,5 @@ export function useSensors({
   const status: Sensors['status'] = {}
   if (wantAudio) status.audio = audio
   if (wantMotion) status.motion = motion
-  return {
-    status,
-    active,
-    setThreshold: (value: number) => audioSensor.current?.setThreshold(value),
-    audioTrack: () => audioSensor.current?.track ?? null,
-    /** Feeds a candidate from another sensor (vision) into the same fusion. */
-    feed: (candidate: ScoredCandidate) => feedRef.current(candidate),
-  }
+  return { status, active, ...controls }
 }

@@ -4,20 +4,8 @@ import { agedPerf, perfToEpoch } from '../device/clock.ts'
 import type { Level } from '../engine/onset.ts'
 import type { HitCandidate } from '../engine/types.ts'
 import workletUrl from './onset.worklet.ts?worker&url'
-import type { OnsetProcessorOptions, WorkletMessage } from './onset.worklet.ts'
-
-let context: AudioContext | null = null
-
-/**
- * Creates (or resumes) the AudioContext. Call it inside the tap that starts a
- * session: iOS only lets audio start from a user gesture.
- */
-export function primeAudio(): AudioContext | null {
-  if (typeof AudioContext === 'undefined') return null
-  context ??= new AudioContext({ latencyHint: 'interactive' })
-  if (context.state === 'suspended') void context.resume()
-  return context
-}
+import { primeAudio } from './prime.ts'
+import type { OnsetProcessorOptions, ProcessorCommand, WorkletMessage } from './onset.worklet.ts'
 
 export interface AudioCandidate extends HitCandidate {
   score: number
@@ -25,12 +13,17 @@ export interface AudioCandidate extends HitCandidate {
 
 export interface TimedLevel extends Level {
   t: number
+  /** Sounds the voice filter has set aside since the mic opened. */
+  rejected: number
 }
 
 export interface AudioSensor {
   /** The raw mic track, reused for the recording's soundtrack. */
   track: MediaStreamTrack | null
   setThreshold: (value: number) => void
+  setVoiceFilter: (on: boolean) => void
+  /** Turns the level trace on while something draws it. */
+  setLevels: (on: boolean) => void
   stop: () => void
 }
 
@@ -56,6 +49,8 @@ export async function startAudio(options: AudioOptions): Promise<AudioSensor> {
     bandHz: options.bandHz,
     refractoryMs: options.refractoryMs,
     threshold: options.threshold,
+    voiceFilter: options.voiceFilter,
+    levels: options.levels,
   }
   const node = new AudioWorkletNode(ctx, 'tok-onset', {
     numberOfInputs: 1,
@@ -79,16 +74,20 @@ export async function startAudio(options: AudioOptions): Promise<AudioSensor> {
     }
   }
   source.connect(node)
-  if (ctx.state === 'suspended') await ctx.resume()
+  const send = (command: ProcessorCommand) => node.port.postMessage(command)
 
   return {
     track: stream.getAudioTracks()[0] ?? null,
-    setThreshold: (value) => node.port.postMessage({ type: 'threshold', value }),
+    setThreshold: (value) => send({ type: 'threshold', value }),
+    setVoiceFilter: (on) => send({ type: 'voiceFilter', on }),
+    setLevels: (on) => send({ type: 'levels', on }),
     stop: () => {
       node.port.onmessage = null
       source.disconnect()
       node.disconnect()
       for (const track of stream.getTracks()) track.stop()
+      // Nothing else plays through it; a running context keeps the audio thread awake.
+      void ctx.suspend()
     },
   }
 }

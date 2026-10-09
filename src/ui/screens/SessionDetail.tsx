@@ -7,7 +7,7 @@ import { countHits, tempo } from '../../engine/stats.ts'
 import { deleteVideo } from '../../record/videoStore.ts'
 import { deleteSession, getSession, type SessionRecord } from '../../store/db.ts'
 import { RallyBars } from '../components/RallyBars.tsx'
-import { fmtDate, fmtDuration, fmtTime, plural } from '../format.ts'
+import { capital, fmtDate, fmtDuration, fmtTime, plural } from '../format.ts'
 import { go } from '../router.ts'
 
 export function SessionDetail({ id }: { id: string }) {
@@ -117,7 +117,7 @@ export function SessionDetail({ id }: { id: string }) {
                 #
               </th>
               <th scope="col" className="py-2 pr-2 text-right font-semibold">
-                {preset.unit.charAt(0).toUpperCase() + preset.unit.slice(1)}
+                {capital(preset.unit)}
               </th>
               <th scope="col" className="py-2 pr-2 text-right font-semibold">
                 Length

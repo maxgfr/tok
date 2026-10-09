@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, test } from 'vitest'
 import {
   clearAll,
   deleteSession,
+  deleteSetting,
   exportAll,
   getSession,
   getSetting,
@@ -66,6 +67,12 @@ describe('settings', () => {
     expect(await getSetting('voice', false)).toBe(false)
     await setSetting('voice', true)
     expect(await getSetting('voice', false)).toBe(true)
+  })
+
+  test('a deleted setting falls back again', async () => {
+    await setSetting('goal', 100)
+    await deleteSetting('goal')
+    expect(await getSetting('goal', 0)).toBe(0)
   })
 })
 

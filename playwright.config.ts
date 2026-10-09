@@ -19,7 +19,10 @@ export default defineConfig({
   timeout: 60_000,
   use: { baseURL: 'http://localhost:4174/tok/', viewport: { width: 390, height: 844 } },
   webServer: {
-    command: 'pnpm build && pnpm preview --port 4174 --strictPort',
+    // CI hands over the build the gates already passed; locally, build first.
+    command: process.env.CI
+      ? 'pnpm preview --port 4174 --strictPort'
+      : 'pnpm build && pnpm preview --port 4174 --strictPort',
     url: 'http://localhost:4174/tok/',
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

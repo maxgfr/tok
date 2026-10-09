@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, test } from 'vitest'
 import { initialLive, liveStep, matchPoints, type LiveAction, type LiveState } from './live.ts'
 import type { RallyConfig } from './rally.ts'
@@ -60,6 +61,25 @@ describe('live session', () => {
     const s = run([tap(0), tap(400), { type: 'tick', t: 5000 }])
     expect(s.lastEnded?.hits).toHaveLength(2)
     expect(run([tap(0)]).lastEnded).toBeNull()
+  })
+
+  test('discard drops the rally in progress without recording it', () => {
+    const before = run([tap(0), tap(400), { type: 'tick', t: 5000 }])
+    const s = [tap(6000), tap(6400), { type: 'discard' } as const].reduce(
+      (acc: LiveState, a: LiveAction) => liveStep(acc, a, CFG),
+      before,
+    )
+    expect(s.rally.phase).toBe('idle')
+    expect(s.rallies).toBe(before.rallies)
+    expect(s.lastEnded).toBeNull()
+  })
+
+  test('discard when idle keeps completed rallies', () => {
+    const before = run([tap(0), { type: 'point', side: 'A', t: 10 }])
+    const s = liveStep(before, { type: 'discard' }, CFG)
+    expect(s.rallies).toEqual(before.rallies)
+    expect(s.awaitingWinner).toBe(before.awaitingWinner)
+    expect(s.rally.phase).toBe('idle')
   })
 })
 

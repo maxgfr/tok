@@ -90,6 +90,10 @@ export async function setSetting(key: string, value: unknown): Promise<void> {
   await (await db()).put('settings', value, key)
 }
 
+export async function deleteSetting(key: string): Promise<void> {
+  await (await db()).delete('settings', key)
+}
+
 export async function clearAll(): Promise<void> {
   const d = await db()
   await Promise.all([d.clear('sessions'), d.clear('settings'), d.clear('videos')])

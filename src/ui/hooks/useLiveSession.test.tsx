@@ -9,6 +9,16 @@ beforeEach(async () => {
   await clearAll()
 })
 
+// IndexedDB keeps its real setImmediate: a save queued on a fake one would
+// never run, and every later transaction would wait behind it.
+const TIMERS: NonNullable<Parameters<typeof vi.useFakeTimers>[0]>['toFake'] = [
+  'setTimeout',
+  'clearTimeout',
+  'setInterval',
+  'clearInterval',
+  'Date',
+]
+
 const video: VideoRef = {
   file: 'x-1.webm',
   store: 'opfs',
@@ -43,7 +53,7 @@ test('renders after finish never overwrite the final save', async () => {
 })
 
 test('a sensor hit stamped in the future cannot keep a rally open forever', async () => {
-  vi.useFakeTimers({ shouldAdvanceTime: true })
+  vi.useFakeTimers({ shouldAdvanceTime: true, toFake: TIMERS })
   try {
     const config = { ...DEFAULT_CONFIG, input: 'auto' as const }
     const { result } = renderHook(() => useLiveSession(config, ['audio']))
@@ -57,6 +67,54 @@ test('a sensor hit stamped in the future cannot keep a rally open forever', asyn
       vi.advanceTimersByTime(3000)
     })
     expect(result.current.inRally).toBe(false)
+  } finally {
+    vi.useRealTimers()
+  }
+})
+
+test('an idle session does not re-render', async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true, toFake: TIMERS })
+  try {
+    const config = { ...DEFAULT_CONFIG, input: 'manual' as const }
+    let renders = 0
+    const { result } = renderHook(() => {
+      renders += 1
+      return useLiveSession(config, ['manual'])
+    })
+    // Let the stored history and goal load.
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 50))
+    })
+    const settled = renders
+    await act(async () => {
+      vi.advanceTimersByTime(5000)
+    })
+    expect(renders).toBe(settled)
+    expect(result.current.inRally).toBe(false)
+  } finally {
+    vi.useRealTimers()
+  }
+})
+
+test('a rally still times out on its own', async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true, toFake: TIMERS })
+  try {
+    const config = { ...DEFAULT_CONFIG, input: 'manual' as const }
+    const { result } = renderHook(() => useLiveSession(config, ['manual']))
+    act(() => {
+      result.current.tap()
+      result.current.tap()
+    })
+    expect(result.current.inRally).toBe(true)
+    await act(async () => {
+      vi.advanceTimersByTime(1000)
+    })
+    expect(result.current.inRally).toBe(true)
+    await act(async () => {
+      vi.advanceTimersByTime(1000)
+    })
+    expect(result.current.inRally).toBe(false)
+    expect(result.current.rallies).toHaveLength(1)
   } finally {
     vi.useRealTimers()
   }

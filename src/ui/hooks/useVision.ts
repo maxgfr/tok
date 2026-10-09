@@ -1,7 +1,9 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { SportPreset } from '../../engine/sports.ts'
 import type { HitCandidate } from '../../engine/types.ts'
 import { startVision } from '../../sensors/vision.ts'
+import { deriveStatus } from './sensorStatus.ts'
+import { useLatest } from './useLatest.ts'
 import type { SensorStatus } from './useSensors.ts'
 
 interface Options {
@@ -21,10 +23,7 @@ export function useVision({
   onGround,
 }: Options): SensorStatus {
   const [phase, setPhase] = useState<SensorStatus>('off')
-  const handlers = useRef({ onCandidate, onGround })
-  useLayoutEffect(() => {
-    handlers.current = { onCandidate, onGround }
-  })
+  const handlers = useLatest({ onCandidate, onGround })
 
   useEffect(() => {
     const el = video.current
@@ -44,7 +43,7 @@ export function useVision({
       vision.stop()
       setPhase('off')
     }
-  }, [enabled, video, preset])
+  }, [enabled, video, preset, handlers])
 
-  return !enabled ? 'off' : phase === 'off' ? 'starting' : phase
+  return deriveStatus(enabled, phase)
 }

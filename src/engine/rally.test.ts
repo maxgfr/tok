@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, test } from 'vitest'
 import { idleRally, rallyStep, type RallyConfig, type RallyState } from './rally.ts'
 import type { Hit, SensorKind } from './types.ts'

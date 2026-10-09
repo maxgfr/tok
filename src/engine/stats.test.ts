@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, test } from 'vitest'
 import { countHits, dailySeries, summarize, tempo, type SessionLike } from './stats.ts'
 import type { Hit, Rally, SensorKind } from './types.ts'

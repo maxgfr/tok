@@ -41,6 +41,27 @@ test('taps count hits in a rally and the session is saved when it ends', async (
   expect(sessions[0]?.rallies[0]?.hits).toHaveLength(3)
 })
 
+test('restart puts the rally back at 0 and records nothing', async () => {
+  const user = userEvent.setup()
+  render(<App />)
+  await user.click(await screen.findByRole('radio', { name: /taps only/i }))
+  await user.click(await screen.findByRole('button', { name: /start table tennis/i }))
+  const tapZone = await screen.findByRole('button', { name: /add a hit/i })
+  await user.click(tapZone)
+  await user.click(tapZone)
+  await user.click(tapZone)
+  await user.click(screen.getByRole('button', { name: /restart/i }))
+  expect(screen.getByRole('button', { name: /current rally: 0/i })).toBeTruthy()
+  expect(screen.getByRole('button', { name: /restart/i })).toHaveProperty('disabled', true)
+
+  act(() => {
+    window.location.hash = '#/history'
+    window.dispatchEvent(new HashChangeEvent('hashchange'))
+  })
+  await screen.findByRole('heading', { name: 'Nothing on the board yet' })
+  expect(await listSessions()).toEqual([])
+})
+
 test('match mode gives points to the tapped side', async () => {
   const user = userEvent.setup()
   render(<App />)

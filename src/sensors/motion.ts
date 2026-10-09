@@ -2,31 +2,12 @@
 
 import { perfToEpoch } from '../device/clock.ts'
 import { MotionPeakDetector, type MotionCandidate } from '../engine/motionPeaks.ts'
+import { primeMotion } from './prime.ts'
 
 /** Some browsers stamp motion events on another clock; trust it only when plausible. */
 const saneStamp = (stamp: number): number => {
   const now = performance.now()
   return Math.abs(now - stamp) < 1000 ? stamp : now
-}
-
-type PermissionFn = () => Promise<'granted' | 'denied'>
-
-const requestPermission = (): PermissionFn | undefined =>
-  (globalThis.DeviceMotionEvent as unknown as { requestPermission?: PermissionFn } | undefined)
-    ?.requestPermission
-
-let permission: Promise<boolean> | null = null
-
-/** Call inside the tap that starts a session. Resolves to whether motion may be read. */
-export function primeMotion(): Promise<boolean> {
-  if (typeof DeviceMotionEvent === 'undefined') return Promise.resolve(false)
-  const ask = requestPermission()
-  permission ??= ask
-    ? ask()
-        .then((r) => r === 'granted')
-        .catch(() => false)
-    : Promise.resolve(true)
-  return permission
 }
 
 export interface MotionSensor {

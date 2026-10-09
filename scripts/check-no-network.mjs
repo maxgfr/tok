@@ -25,6 +25,11 @@ const ALLOWED_HOSTS = [
   ['bit.ly', 'Workbox console.warn documentation link (bit.ly/wb-precache)'],
   ['w3.org', 'XML/SVG namespace declarations, never dereferenced'],
   ['maxgfr.github.io', "the app's own canonical address in meta tags and the manifest"],
+  ['www.webmproject.org', 'Mediabunny: VP9 codec-string spec link inside a thrown Error message'],
+  [
+    'aomediacodec.github.io',
+    'Mediabunny: AV1 codec-string spec link inside a thrown Error message',
+  ],
   // An <a href> is navigation the user chooses to perform, not the app opening
   // a connection. The CSP's form-action/connect-src still block everything else,
   // and the FETCH_LITERAL check below would catch it if this ever became a fetch.

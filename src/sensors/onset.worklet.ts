@@ -1,6 +1,6 @@
 // Runs on the audio rendering thread: every 128-sample quantum goes through
-// the onset detector, and only onsets and a ~30 Hz level trace cross over to
-// the main thread.
+// the onset detector, and only onsets cross over to the main thread, plus a
+// ~30 Hz level trace while a screen draws it.
 
 import { OnsetDetector, type Level } from '../engine/onset.ts'
 
@@ -15,18 +15,29 @@ export interface OnsetProcessorOptions {
   bandHz: [number, number]
   refractoryMs: number
   threshold: number
+  voiceFilter: boolean
+  /** Post the level trace; off unless a screen shows it. */
+  levels: boolean
 }
+
+/** Main thread → worklet: settings changed while it runs. */
+export type ProcessorCommand =
+  | { type: 'threshold'; value: number }
+  | { type: 'voiceFilter'; on: boolean }
+  | { type: 'levels'; on: boolean }
 
 /** `age`: seconds of audio processed since the event, by sample count. */
 export type WorkletMessage =
   | { type: 'onset'; age: number; score: number; confidence: number }
-  | ({ type: 'level'; age: number } & Level)
+  /** `rejected`: sounds the voice filter has set aside so far. */
+  | ({ type: 'level'; age: number; rejected: number } & Level)
 
 class OnsetProcessor extends AudioWorkletProcessor {
   private readonly detector: OnsetDetector
   /** Seconds of audio pushed so far: the detector's own clock. */
   private elapsed = 0
   private lastLevel = 0
+  private levels: boolean
 
   constructor(options: { processorOptions: OnsetProcessorOptions }) {
     super()
@@ -36,9 +47,13 @@ class OnsetProcessor extends AudioWorkletProcessor {
       bandHz: o.bandHz,
       refractoryMs: o.refractoryMs,
       threshold: o.threshold,
+      voiceFilter: o.voiceFilter,
     })
-    this.port.onmessage = (event: MessageEvent<{ type: 'threshold'; value: number }>) => {
-      if (event.data.type === 'threshold') this.detector.threshold = event.data.value
+    this.levels = o.levels
+    this.port.onmessage = ({ data }: MessageEvent<ProcessorCommand>) => {
+      if (data.type === 'threshold') this.detector.threshold = data.value
+      else if (data.type === 'voiceFilter') this.detector.voiceFilter = data.on
+      else this.levels = data.on
     }
   }
 
@@ -56,9 +71,14 @@ class OnsetProcessor extends AudioWorkletProcessor {
       }
       this.port.postMessage(message)
     }
-    if (this.elapsed - this.lastLevel > 1 / 30) {
+    if (this.levels && this.elapsed - this.lastLevel > 1 / 30) {
       this.lastLevel = this.elapsed
-      const level: WorkletMessage = { type: 'level', age: 0, ...this.detector.level() }
+      const level: WorkletMessage = {
+        type: 'level',
+        age: 0,
+        rejected: this.detector.rejected,
+        ...this.detector.level(),
+      }
       this.port.postMessage(level)
     }
     return true

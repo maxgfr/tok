@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { startRecording, type Recording } from '../../record/recorder.ts'
 import type { OverlayState } from '../../record/overlay.ts'
 import { startCamera } from '../../sensors/camera.ts'
 import type { VideoRef } from '../../store/db.ts'
+import { deriveStatus, failure } from './sensorStatus.ts'
+import { useLatest } from './useLatest.ts'
 
 export type CameraStatus = 'off' | 'starting' | 'on' | 'recording' | 'blocked' | 'unavailable'
 
@@ -10,7 +12,8 @@ interface Options {
   enabled: boolean
   /** File name stem for the recordings (the session id). */
   name: string
-  overlay: () => OverlayState
+  /** The score to burn in; each new object repaints the plate. */
+  overlay: OverlayState
   audioTrack: () => MediaStreamTrack | null
 }
 
@@ -23,15 +26,12 @@ export function useCamera({ enabled, name, overlay, audioTrack }: Options) {
   const video = useRef<HTMLVideoElement>(null)
   // Only async outcomes are stored; 'starting' is derived while enabled.
   const [phase, setPhase] = useState<CameraStatus>('off')
-  const status: CameraStatus = !enabled ? 'off' : phase === 'off' ? 'starting' : phase
+  const status: CameraStatus = deriveStatus(enabled, phase)
   const recording = useRef<Recording | null>(null)
   const parts = useRef<Promise<VideoRef | null>[]>([])
   // Every start gets a fresh file name, even if an earlier part was cancelled.
   const partNumber = useRef(0)
-  const opts = useRef({ overlay, audioTrack, name })
-  useEffect(() => {
-    opts.current = { overlay, audioTrack, name }
-  })
+  const opts = useLatest({ overlay, audioTrack, name })
 
   useEffect(() => {
     if (!enabled) return
@@ -54,7 +54,7 @@ export function useCamera({ enabled, name, overlay, audioTrack }: Options) {
         const rec = await startRecording({
           video: el,
           audioTrack: opts.current.audioTrack(),
-          overlay: () => opts.current.overlay(),
+          overlay: () => opts.current.overlay,
           name: `${opts.current.name}-${(partNumber.current += 1)}`,
         })
         if (cancelled) {
@@ -66,8 +66,7 @@ export function useCamera({ enabled, name, overlay, audioTrack }: Options) {
         if (rec) setPhase('recording')
       } catch (error) {
         if (cancelled) return
-        const n = (error as DOMException).name
-        setPhase(n === 'NotAllowedError' || n === 'SecurityError' ? 'blocked' : 'unavailable')
+        setPhase(failure(error))
       }
     })()
     return () => {
@@ -81,7 +80,7 @@ export function useCamera({ enabled, name, overlay, audioTrack }: Options) {
       if (el) el.srcObject = null
       setPhase('off')
     }
-  }, [enabled])
+  }, [enabled, opts])
 
   /** Stops recording (if any) and resolves to every saved part. */
   const stop = async (): Promise<VideoRef[]> => {
@@ -93,5 +92,8 @@ export function useCamera({ enabled, name, overlay, audioTrack }: Options) {
     return saved.filter((v): v is VideoRef => v !== null)
   }
 
-  return { video, status, stop }
+  /** A rally is starting: the recording puts a key frame there. */
+  const markRally = useCallback(() => recording.current?.markRally(), [])
+
+  return { video, status, stop, markRally }
 }

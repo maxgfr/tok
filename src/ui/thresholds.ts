@@ -1,6 +1,6 @@
 import { DEFAULT_THRESHOLD } from '../engine/onset.ts'
 import type { SportId } from '../engine/sports.ts'
-import { getSetting, setSetting } from '../store/db.ts'
+import { deleteSetting, getSetting, setSetting } from '../store/db.ts'
 
 /** The audio threshold each sport was calibrated to on this device. */
 export const loadThreshold = (sportId: SportId): Promise<number> =>
@@ -8,6 +8,17 @@ export const loadThreshold = (sportId: SportId): Promise<number> =>
 
 export const saveThreshold = (sportId: SportId, value: number): Promise<void> =>
   setSetting(`threshold:${sportId}`, value)
+
+/** Forget the calibration: the sport counts at `DEFAULT_THRESHOLD` again. */
+export const resetThreshold = (sportId: SportId): Promise<void> =>
+  deleteSetting(`threshold:${sportId}`)
+
+/** Whether sustained sounds (voices, squeaks) are kept out of the count. On unless turned off. */
+export const loadVoiceFilter = (sportId: SportId): Promise<boolean> =>
+  getSetting(`voiceFilter:${sportId}`, true)
+
+export const saveVoiceFilter = (sportId: SportId, on: boolean): Promise<void> =>
+  setSetting(`voiceFilter:${sportId}`, on)
 
 /** Threshold in MADs (2 = twitchy … 40 = deaf) ↔ a 0–100 sensitivity slider. */
 export const MIN_THRESHOLD = 2
