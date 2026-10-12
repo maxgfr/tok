@@ -177,7 +177,8 @@ export async function readVideo(ref: VideoRef): Promise<Blob | null> {
     const dir = await recordingsDir()
     const handle = await dir?.getFileHandle(ref.file)
     const file = await handle?.getFile()
-    return file ? new Blob([file], { type: ref.mimeType }) : null
+    // Empty: the tab died before the file was closed (OPFS keeps writes aside until then).
+    return file && file.size > 0 ? new Blob([file], { type: ref.mimeType }) : null
   } catch {
     return null
   }

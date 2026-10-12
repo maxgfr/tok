@@ -72,7 +72,9 @@ export async function startEncoder({
 }): Promise<Encoder> {
   const output = new Output({
     format: new Mp4OutputFormat({ fastStart: 'fragmented' }),
-    target: new StreamTarget(stream, { chunked: true }),
+    // 1 MiB, not the default 16: each chunk is saved as it comes (IndexedDB),
+    // so a crash loses seconds of video, not the last minute.
+    target: new StreamTarget(stream, { chunked: true, chunkSize: 2 ** 20 }),
   })
   const video = new CanvasSource(canvas, {
     codec: codecs.video,

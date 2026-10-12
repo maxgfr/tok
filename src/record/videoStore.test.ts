@@ -51,6 +51,21 @@ test("a muxer's positioned writes, one going back to patch the start, read back 
   expect(await (await readVideo(ref('b.mp4', 'video/mp4')))?.text()).toBe('headbody')
 })
 
+test('a recording the tab died writing (an empty OPFS file) reads as no video', async () => {
+  const file = (size: number) => ({ getFile: async () => new File([new Uint8Array(size)], 'f') })
+  const dir = { getFileHandle: async (name: string) => file(name === 'empty.mp4' ? 0 : 3) }
+  vi.stubGlobal('navigator', {
+    storage: { getDirectory: async () => ({ getDirectoryHandle: async () => dir }) },
+  })
+  try {
+    const opfs = (name: string) => ({ ...ref(name, 'video/mp4'), store: 'opfs' as const })
+    expect(await readVideo(opfs('empty.mp4'))).toBeNull()
+    expect((await readVideo(opfs('kept.mp4')))?.size).toBe(3)
+  } finally {
+    vi.unstubAllGlobals()
+  }
+})
+
 test('deleting a recording removes its chunks', async () => {
   const writer = await openVideoWriter('c.webm')
   writer.write(new Blob(['x']))

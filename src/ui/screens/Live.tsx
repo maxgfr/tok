@@ -186,7 +186,8 @@ export function Live({ config: initial }: { config: LiveConfig }) {
   const [usedVision, setUsedVision] = useState(false)
   if (vision === 'on' && !usedVision) setUsedVision(true)
   // A finger on the glass is loud to the mic: no tap (End rally, Undo…) counts as a hit.
-  useEffect(() => maskTouches(window), [])
+  // In pocket mode a touch is fabric, swallowed: it must not blind the sensors either.
+  useEffect(() => (pocket ? undefined : maskTouches(window)), [pocket])
   // Any touch is a gesture: the moment to get back a mic iOS suspended.
   const auto = config.input === 'auto'
   useEffect(() => {
