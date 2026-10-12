@@ -3,6 +3,7 @@ import { matchPhrase, rallyPhrase } from '../../device/phrases.ts'
 import { startRemote } from '../../device/remote.ts'
 import { hitSound, rallyEndSound } from '../../device/sounds.ts'
 import { speak } from '../../device/speech.ts'
+import { retainAudio } from '../../sensors/prime.ts'
 import { matchPoints } from '../../engine/live.ts'
 import { loadCoach, type CoachSettings } from '../coach.ts'
 import type { LiveConfig } from '../config.ts'
@@ -21,7 +22,9 @@ export function useCoach(config: LiveConfig, session: LiveSession): void {
   // Rally mode: call each finished rally.
   const { verdict, count, inRally } = session
 
-  // Sounds: a click for each hit counted, a chime when a rally ends.
+  // Sounds: a click for each hit counted, a chime when a rally ends. They share
+  // the mic's context: it must not be suspended under them.
+  useEffect(() => (coach?.sounds ? retainAudio() : undefined), [coach?.sounds])
   const heard = useRef({ count, inRally })
   useEffect(() => {
     const before = heard.current

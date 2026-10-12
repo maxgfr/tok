@@ -69,6 +69,13 @@ const ATTACK_RISE = 3
 /** Band energies kept: the current frame and the five before it. */
 const ENERGY_FRAMES = 6
 
+/**
+ * Floor on the spread, in flux units. A working mic's own hiss spreads the
+ * flux by ≥ 0.045; a near-silent one (or the digital zeros before it opens)
+ * by far less, and dividing by that turns a faint puff into a "hit".
+ */
+const MIN_SPREAD = 0.045
+
 const median = (sorted: Float32Array): number => {
   const n = sorted.length
   const mid = n >> 1
@@ -203,8 +210,10 @@ export class OnsetDetector {
     this.historyCount = Math.min(this.historyCount + 1, this.history.length)
 
     const med = this.med
-    const spread = Math.max(this.mad, 1e-3)
-    const score = count < 8 ? 0 : (flux - med) / spread
+    const spread = Math.max(this.mad, MIN_SPREAD)
+    // No verdict until half the memory is filled: a median of a few frames of
+    // near-silence makes the mic's opening pop look like a hit.
+    const score = count < this.history.length / 2 ? 0 : (flux - med) / spread
     // The frame's centre is where its energy sits.
     const t = (this.samples - this.n / 2) / this.sr
     const { last } = this

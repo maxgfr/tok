@@ -39,6 +39,7 @@ export function useVision({
         document.documentElement.dataset.vision = mode
         setPhase('on')
       },
+      onError: () => setPhase('unavailable'),
     })
     return () => {
       vision.stop()

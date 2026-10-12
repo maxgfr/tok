@@ -37,11 +37,14 @@ const tone = (s: SensorStatus) =>
 export function SensorChips({
   status,
   dominant,
+  heard = false,
   onAudio,
 }: {
   status: Sensors['status']
   /** The sport's main sensor: only its failures are worth a chip. */
   dominant?: AutoSensor
+  /** Something was heard that may open a rally: the mic chip pulses. */
+  heard?: boolean
   /** Makes the mic chip a button that opens the sensitivity settings. */
   onAudio?: () => void
 }) {
@@ -69,7 +72,16 @@ export function SensorChips({
         const chip = `flex h-8 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-sm font-semibold ${tone(s)}`
         const content = (
           <>
-            <Icon size={16} aria-hidden="true" />
+            <span className="relative grid place-items-center">
+              <Icon size={16} aria-hidden="true" />
+              {kind === 'audio' && heard && s === 'on' && (
+                <span
+                  data-testid="heard"
+                  aria-hidden="true"
+                  className="absolute inset-0 rounded-full bg-live/60 motion-safe:animate-ping"
+                />
+              )}
+            </span>
             {/* Icon-only on narrow phones: the colour carries the state, the label stays for screen readers. */}
             <span className="max-[460px]:sr-only">{TEXT[kind][s]}</span>
           </>

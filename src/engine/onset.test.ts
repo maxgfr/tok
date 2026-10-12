@@ -108,6 +108,28 @@ describe('OnsetDetector', () => {
     expect(det.rejected).toBeGreaterThanOrEqual(3)
   })
 
+  test('a pop as the mic opens is not a hit', () => {
+    for (const at of [0.05, 0.3]) {
+      const toks = [{ at, gain: 0.8, click: 1 }]
+      expect(detect(synth({ sampleRate: SR, seconds: 3, toks }))).toEqual([])
+    }
+  })
+
+  test('the first hit after the warm-up still counts', () => {
+    const toks = [{ at: 0.3, gain: 0.8, click: 1 }, ...steady(3, 1, 0.5)]
+    expect(detect(synth({ sampleRate: SR, seconds: 3, toks }))).toHaveLength(3)
+  })
+
+  test('a near-silent mic does not turn a faint puff into a hit', () => {
+    const toks = steady(3, 1, 1.2, { gain: 0.0003 })
+    expect(detect(synth({ sampleRate: SR, seconds: 5, toks, noise: 0.00005 }))).toEqual([])
+  })
+
+  test('a near-silent mic still hears a real hit', () => {
+    const toks = steady(3, 1, 1.2, { gain: 0.05 })
+    expect(detect(synth({ sampleRate: SR, seconds: 5, toks, noise: 0.00005 }))).toHaveLength(3)
+  })
+
   test('nothing fired: the same empty array, no allocation', () => {
     const det = new OnsetDetector({ sampleRate: SR, bandHz: [1500, 6000], refractoryMs: 120 })
     expect(det.push(new Float32Array(128))).toBe(det.push(new Float32Array(128)))

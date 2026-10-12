@@ -3,6 +3,9 @@
 // first moment the total reaches `accept` the hit is emitted (at the earliest
 // agreeing time). Later confirmations of an emitted hit are absorbed, so a hit
 // heard by the mic and felt by the accelerometer still counts once.
+//
+// While the sport's main sensor runs, a group must include it: a shake of the
+// phone and a blob on camera (0.4 + 0.2) are not a hit the mic never heard.
 
 import type { AutoSensor } from './sports.ts'
 import type { Hit, HitCandidate, SensorKind } from './types.ts'
@@ -11,6 +14,8 @@ export interface FusionOptions {
   weights: Record<AutoSensor, number>
   windowMs?: number
   accept?: number
+  /** A sensor every hit must include, while it runs; null when any may count alone. */
+  required?: AutoSensor | null
 }
 
 interface Pending {
@@ -22,12 +27,14 @@ export class Fusion {
   private readonly weights: Record<AutoSensor, number>
   private readonly window: number
   private readonly accept: number
+  required: AutoSensor | null
   private groups: Pending[] = []
 
   constructor(opts: FusionOptions) {
     this.weights = opts.weights
     this.window = opts.windowMs ?? 120
     this.accept = opts.accept ?? 0.6
+    this.required = opts.required ?? null
   }
 
   private weight(source: SensorKind): number {
@@ -55,6 +62,10 @@ export class Fusion {
   private decide(group: Pending): Hit | null {
     const votes = group.candidates.reduce((sum, c) => sum + this.weight(c.source), 0)
     if (votes < this.accept) return null
+    const { required } = this
+    if (required && !group.candidates.some((c) => c.source === required || c.source === 'manual')) {
+      return null
+    }
     group.emitted = true
     const t = Math.min(...group.candidates.map((c) => c.t))
     const confidence = Math.max(...group.candidates.map((c) => c.confidence))

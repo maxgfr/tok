@@ -1,10 +1,15 @@
 // Microphone → AudioWorklet onset detector → hit candidates on the epoch clock.
+//
+// A phone takes the mic away: a call, Siri, the screen locked, another app.
+// The context gets suspended or interrupted, the track muted or ended. Each is
+// reported, so the chip stops saying "Listening" to a dead mic, and the
+// context is resumed when it can be; a track that ended needs a new one.
 
 import { agedPerf, perfToEpoch } from '../device/clock.ts'
 import type { Level } from '../engine/onset.ts'
 import type { HitCandidate } from '../engine/types.ts'
 import workletUrl from './onset.worklet.ts?worker&url'
-import { primeAudio } from './prime.ts'
+import { primeAudio, retainAudio } from './prime.ts'
 import type { OnsetProcessorOptions, ProcessorCommand, WorkletMessage } from './onset.worklet.ts'
 
 export interface AudioCandidate extends HitCandidate {
@@ -32,6 +37,10 @@ export interface AudioOptions extends OnsetProcessorOptions {
   deviceId?: string
   onCandidate: (candidate: AudioCandidate) => void
   onLevel?: (level: TimedLevel) => void
+  /** The mic stopped hearing (false) or hears again (true). */
+  onHealth?: (hearing: boolean) => void
+  /** The track ended: only a new one hears again. */
+  onLost?: () => void
 }
 
 /** Epoch ms of an audio event that happened `age` seconds of audio ago. */
@@ -83,19 +92,53 @@ export async function startAudio(options: AudioOptions): Promise<AudioSensor> {
   }
   source.connect(node)
   const send = (command: ProcessorCommand) => node.port.postMessage(command)
+  const release = retainAudio()
+
+  const track = stream.getAudioTracks()[0] ?? null
+  let stopped = false
+  const hearing = () =>
+    ctx.state === 'running' && !!track && !track.muted && track.readyState === 'live'
+  const check = () => {
+    if (stopped) return
+    if (track?.readyState === 'ended') {
+      options.onLost?.()
+      return
+    }
+    // Suspended or interrupted behind our back: ask for it back.
+    if (ctx.state !== 'running' && ctx.state !== 'closed') void ctx.resume().catch(() => {})
+    options.onHealth?.(hearing())
+  }
+  ctx.addEventListener('statechange', check)
+  const onVisible = () => {
+    if (document.visibilityState === 'visible') check()
+  }
+  document.addEventListener('visibilitychange', onVisible)
+  if (track) {
+    track.addEventListener('mute', check)
+    track.addEventListener('unmute', check)
+    track.addEventListener('ended', check)
+  }
 
   return {
-    track: stream.getAudioTracks()[0] ?? null,
+    track,
     setThreshold: (value) => send({ type: 'threshold', value }),
     setVoiceFilter: (on) => send({ type: 'voiceFilter', on }),
     setLevels: (on) => send({ type: 'levels', on }),
     stop: () => {
+      stopped = true
+      ctx.removeEventListener('statechange', check)
+      document.removeEventListener('visibilitychange', onVisible)
+      if (track) {
+        track.removeEventListener('mute', check)
+        track.removeEventListener('unmute', check)
+        track.removeEventListener('ended', check)
+      }
       node.port.onmessage = null
       source.disconnect()
       node.disconnect()
-      for (const track of stream.getTracks()) track.stop()
-      // Nothing else plays through it; a running context keeps the audio thread awake.
-      void ctx.suspend()
+      for (const t of stream.getTracks()) t.stop()
+      // Suspended once nothing else (the coach's sounds) uses it.
+      release()
     },
   }
 }
