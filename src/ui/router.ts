@@ -8,6 +8,15 @@ export type Route =
   | { name: 'replay'; id: string }
   | { name: 'settings' }
 
+/** A broken escape in a link (`%E0%A4%A`) must not take the whole app down. */
+const decode = (part: string): string | null => {
+  try {
+    return decodeURIComponent(part)
+  } catch {
+    return null
+  }
+}
+
 export function parseHash(hash: string): Route {
   const parts = hash.replace(/^#\/?/, '').split('/').filter(Boolean)
   const [head, id] = parts
@@ -16,9 +25,11 @@ export function parseHash(hash: string): Route {
     case 'settings':
       return { name: head }
     case 'history':
-      return id ? { name: 'session', id: decodeURIComponent(id) } : { name: 'history' }
-    case 'replay':
-      return id ? { name: 'replay', id: decodeURIComponent(id) } : { name: 'history' }
+    case 'replay': {
+      const decoded = id === undefined ? null : decode(id)
+      if (decoded === null) return { name: 'history' }
+      return { name: head === 'history' ? 'session' : 'replay', id: decoded }
+    }
     default:
       return { name: 'home' }
   }

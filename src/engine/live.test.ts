@@ -68,7 +68,7 @@ describe('live session', () => {
   test('a point with no rally at all is recorded as an empty rally', () => {
     const s = run([{ type: 'point', side: 'A', t: 10 }])
     expect(s.rallies).toEqual([
-      { startedAt: 10, endedAt: 10, hits: [], endReason: 'manual', winner: 'A' },
+      { startedAt: 10, endedAt: 10, hits: [], endReason: 'manual', winner: 'A', wonAt: 10 },
     ])
   })
 
@@ -84,6 +84,42 @@ describe('live session', () => {
     const t = liveStep(s, { type: 'undoPoint' }, CFG)
     expect(t.rallies).toHaveLength(1)
     expect(t.rallies[0]?.winner).toBeUndefined()
+  })
+
+  test('undoing the point of a rally that is not the last leaves no rally without its point', () => {
+    const s = run([
+      tap(0),
+      { type: 'point', side: 'A', t: 10 },
+      tap(100),
+      { type: 'tick', t: 5000 },
+      // The point of the first rally was a mistake.
+      { type: 'undoPoint' },
+    ])
+    expect(s.rallies.map((r) => r.winner)).toEqual([undefined, undefined])
+    const fixed = liveStep(s, { type: 'point', side: 'B', t: 6000 }, CFG)
+    expect(fixed.rallies.map((r) => r.winner)).toEqual(['B', undefined])
+    expect(fixed.awaitingWinner).toBe(true)
+    const done = liveStep(fixed, { type: 'point', side: 'A', t: 7000 }, CFG)
+    expect(matchPoints(done.rallies)).toEqual(['B', 'A'])
+    expect(done.awaitingWinner).toBe(false)
+  })
+
+  test('Undo point takes back the point given last, even on an earlier rally', () => {
+    const s = run([
+      tap(0),
+      { type: 'point', side: 'A', t: 10 },
+      // Rally 2 ends with nobody given its point…
+      tap(100),
+      { type: 'tick', t: 5000 },
+      // …rally 3 is given B as it is played, then rally 2 gets A.
+      tap(6000),
+      { type: 'point', side: 'B', t: 6500 },
+      { type: 'point', side: 'A', t: 7000 },
+    ])
+    expect(matchPoints(s.rallies)).toEqual(['A', 'A', 'B'])
+    const undone = liveStep(s, { type: 'undoPoint' }, CFG)
+    expect(undone.rallies.map((r) => r.winner)).toEqual(['A', undefined, 'B'])
+    expect(undone.awaitingWinner).toBe(true)
   })
 
   test('lastEnded points at the rally that just finished', () => {

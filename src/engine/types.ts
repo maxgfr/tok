@@ -27,6 +27,8 @@ export interface Rally {
   endReason: RallyEndReason
   /** Match mode: who won the point. */
   winner?: Side
+  /** Match mode: when that point was given; Undo point takes back the latest. */
+  wonAt?: number
   /** The player's own count, set when they corrected the rally afterwards. */
   count?: number
 }

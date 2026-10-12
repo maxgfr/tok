@@ -90,6 +90,33 @@ export async function setSetting(key: string, value: unknown): Promise<void> {
   await (await db()).put('settings', value, key)
 }
 
+/**
+ * Reads, changes and writes a setting in one transaction: two changes made at
+ * once (two fields of the same rules) both land.
+ */
+export async function updateSetting<T>(
+  key: string,
+  fallback: T,
+  update: (value: T) => T,
+): Promise<void> {
+  const tx = (await db()).transaction('settings', 'readwrite')
+  const store = tx.objectStore('settings')
+  const value = await store.get(key)
+  await Promise.all([
+    store.put(update(value === undefined ? fallback : (value as T)), key),
+    tx.done,
+  ])
+}
+
+/** Several settings written together, in one transaction. */
+export async function setSettings(values: Record<string, unknown>): Promise<void> {
+  const tx = (await db()).transaction('settings', 'readwrite')
+  await Promise.all([
+    ...Object.entries(values).map(([key, value]) => tx.objectStore('settings').put(value, key)),
+    tx.done,
+  ])
+}
+
 export async function deleteSetting(key: string): Promise<void> {
   await (await db()).delete('settings', key)
 }

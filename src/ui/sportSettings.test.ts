@@ -28,6 +28,22 @@ test('a sport plays by its official rules until they are changed', async () => {
   expect(await loadRules('badminton')).toEqual(sport('badminton').scoring)
 })
 
+test('two rule changes made at once are both kept', async () => {
+  await Promise.all([
+    saveRules('volleyball', { pointsToWin: 21 }),
+    saveRules('volleyball', { setsToWin: 2 }),
+  ])
+  expect(await loadRules('volleyball')).toMatchObject({ pointsToWin: 21, setsToWin: 2 })
+})
+
+test("the deciding set follows the player's points to win, never longer than a set", async () => {
+  expect(await loadRules('volleyball')).toMatchObject({ pointsToWin: 25, decidingSetPoints: 15 })
+  await saveRules('volleyball', { pointsToWin: 11 })
+  expect(await loadRules('volleyball')).toMatchObject({ pointsToWin: 11, decidingSetPoints: 11 })
+  await saveRules('volleyball', { pointsToWin: 21 })
+  expect(await loadRules('volleyball')).toMatchObject({ pointsToWin: 21, decidingSetPoints: 15 })
+})
+
 test('a sport without a match has no rules to change', async () => {
   expect(await loadRules('beach-rackets')).toBeNull()
 })

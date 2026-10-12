@@ -53,6 +53,21 @@ test('the microphone can be chosen, once its name is known', async () => {
   await expect.poll(() => getSetting('micDevice', '')).toBe('headset')
 })
 
+test('after Delete everything, the screen shows the defaults again', async () => {
+  const user = userEvent.setup()
+  render(<Settings />)
+  const sounds = await screen.findByRole('checkbox', { name: /^sounds/i })
+  await expect.poll(() => (sounds as HTMLInputElement).disabled).toBe(false)
+  await user.click(sounds)
+  await expect.poll(() => getSetting('sounds', true)).toBe(false)
+  await user.click(screen.getByRole('button', { name: /delete everything/i }))
+  await user.click(screen.getByRole('button', { name: /delete all sessions/i }))
+  await screen.findByText(/everything is wiped/i)
+  await expect
+    .poll(() => (screen.getByRole('checkbox', { name: /^sounds/i }) as HTMLInputElement).checked)
+    .toBe(true)
+})
+
 test('sounds are on until turned off', async () => {
   const user = userEvent.setup()
   render(<Settings />)

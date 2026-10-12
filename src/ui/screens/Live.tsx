@@ -593,9 +593,9 @@ function MatchBoard({ session, config }: { session: LiveSession; config: LiveCon
       >
         {match.current[side]}
       </span>
-      {match.matchPoint === side ? (
+      {match.matchPoint.includes(side) ? (
         <span className="figures text-2xl font-semibold text-best">Match point</span>
-      ) : match.setPoint === side ? (
+      ) : match.setPoint.includes(side) ? (
         <span className="figures text-2xl font-semibold text-best">Set point</span>
       ) : null}
     </button>

@@ -14,6 +14,7 @@ import { SportSettings } from '../components/SportSettings.tsx'
 import { Toggle } from '../components/Toggle.tsx'
 import { loadCoach, saveCoach, type CoachSettings } from '../coach.ts'
 import { fmtBytes, plural } from '../format.ts'
+import { download } from '../download.ts'
 import { loadMicDevice, saveMicDevice } from '../micDevice.ts'
 
 export function Settings() {
@@ -25,9 +26,11 @@ export function Settings() {
   const [coach, setCoach] = useState<CoachSettings | null>(null)
   const [voiceAvailable, setVoiceAvailable] = useState(canSpeak)
   const [mic, setMic] = useState('')
+  // Bumped by "Delete everything": every setting on screen is read again.
+  const [wiped, setWiped] = useState(0)
   useEffect(() => {
     void loadMicDevice().then(setMic)
-  }, [])
+  }, [wiped])
   useEffect(() => {
     // Voices arrive asynchronously in some browsers.
     const synth = globalThis.speechSynthesis
@@ -39,7 +42,7 @@ export function Settings() {
 
   useEffect(() => {
     void loadCoach().then(setCoach)
-  }, [])
+  }, [wiped])
 
   const updateCoach = (patch: Partial<CoachSettings>) => {
     if (!coach) return
@@ -56,12 +59,7 @@ export function Settings() {
   const doExport = async () => {
     const data = await exportAll()
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `tok-backup-${data.exportedAt.slice(0, 10)}.json`
-    a.click()
-    URL.revokeObjectURL(url)
+    download(blob, `tok-backup-${data.exportedAt.slice(0, 10)}.json`)
     setMessage(
       `Saved ${data.sessions.length} ${plural(data.sessions.length, 'session', 'sessions')} to a file.`,
     )
@@ -83,6 +81,7 @@ export function Settings() {
 
   const wipe = async () => {
     await Promise.all([clearAll(), clearVideos()])
+    setWiped((n) => n + 1)
     setConfirmWipe(false)
     setMessage('Everything is wiped. Fresh board.')
     refresh()
@@ -118,7 +117,7 @@ export function Settings() {
         <h2 id="sports-h" className="text-xl font-semibold">
           Sports
         </h2>
-        <SportSettings />
+        <SportSettings key={wiped} />
       </section>
 
       <section aria-labelledby="coach-h" className="flex flex-col gap-3">

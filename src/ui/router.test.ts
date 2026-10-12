@@ -15,5 +15,11 @@ describe('parseHash', () => {
 
   test('a session id is decoded', () => {
     expect(parseHash('#/history/abc%20d')).toEqual({ name: 'session', id: 'abc d' })
+    expect(parseHash('#/replay/abc%20d')).toEqual({ name: 'replay', id: 'abc d' })
+  })
+
+  test('a malformed link opens History instead of breaking the app', () => {
+    expect(parseHash('#/history/%E0%A4%A')).toEqual({ name: 'history' })
+    expect(parseHash('#/replay/%')).toEqual({ name: 'history' })
   })
 })

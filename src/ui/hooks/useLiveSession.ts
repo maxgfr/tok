@@ -4,7 +4,7 @@ import type { RallyConfig } from '../../engine/rally.ts'
 import { replay, type MatchView, type ScoringRules, type Side } from '../../engine/scoring/index.ts'
 import { sport, type SportPreset } from '../../engine/sports.ts'
 import { judgeRally } from '../../engine/judge.ts'
-import { countHits, rallyCount, summarize, type Summary } from '../../engine/stats.ts'
+import { countHits, rallyCount, summarize, type SessionLike } from '../../engine/stats.ts'
 import type { Hit, Rally, SensorKind } from '../../engine/types.ts'
 import { buzz } from '../../device/haptics.ts'
 import { deleteSession, listSessions, saveSession, type SessionRecord } from '../../store/db.ts'
@@ -89,8 +89,9 @@ export function useLiveSession(config: LiveConfig, sensors: SensorKind[]): LiveS
   )
   const [id] = useState(() => crypto.randomUUID())
   const [startedAt] = useState(() => Date.now())
-  // Every earlier session, boiled down to the numbers a verdict needs.
-  const [before, setBefore] = useState<Summary>({ best: 0, todayBest: 0, average: 0, rallies: 0 })
+  // Every earlier session: null until loaded, and no verdict before then (a
+  // record judged against nothing is a false "New record").
+  const [earlier, setEarlier] = useState<SessionLike[] | null>(null)
   const [verdict, setVerdict] = useState<RallyVerdict | null>(null)
   const savedOnce = useRef(false)
   // Once finish() has started, it owns the last write.
@@ -109,14 +110,12 @@ export function useLiveSession(config: LiveConfig, sensors: SensorKind[]): LiveS
   useEffect(() => {
     let alive = true
     void listSessions().then((all) => {
-      if (!alive) return
-      const earlier = all.filter((s) => s.id !== id)
-      setBefore(summarize(earlier, config.sportId, preset.soundsPerHit, startedAt))
+      if (alive) setEarlier(all.filter((s) => s.id !== id))
     })
     return () => {
       alive = false
     }
-  }, [id, config.sportId, preset.soundsPerHit, startedAt])
+  }, [id])
 
   // A rally ends when the player says so (End rally, a point, a remote button).
   // Only if they turned on "end rallies on their own" does a timer, set for
@@ -148,35 +147,47 @@ export function useLiveSession(config: LiveConfig, sensors: SensorKind[]): LiveS
     return () => window.clearTimeout(timer)
   }, [deadline])
 
-  // The session's best, and its best before the rally that just ended (what
-  // that rally is judged against): one pass over the rallies.
-  const { sessionBest, earlierBest } = useMemo(() => {
-    let earlier = 0
-    let last = 0
-    for (const r of state.rallies) {
-      const n = rallyCount(r, preset.soundsPerHit)
-      if (r === state.lastEnded) last = n
-      else earlier = Math.max(earlier, n)
-    }
-    return { sessionBest: Math.max(earlier, last), earlierBest: earlier }
-  }, [state.rallies, state.lastEnded, preset.soundsPerHit])
+  // Best ever and best of the day, this session included, with "today" the
+  // day the last rally ended: a session can run past midnight.
+  const standing = useMemo(() => {
+    const session = { sportId: config.sportId, startedAt, rallies: state.rallies }
+    const at = state.lastEnded?.endedAt ?? startedAt
+    return summarize([...(earlier ?? []), session], config.sportId, preset.soundsPerHit, at)
+  }, [earlier, state.rallies, state.lastEnded, config.sportId, startedAt, preset.soundsPerHit])
 
-  // Judge each rally as it ends.
+  // Judge each rally as it ends, against everything before it, once history is in.
   const judged = useRef<Rally | null>(null)
   useEffect(() => {
     const rally = state.lastEnded
-    if (!rally || judged.current === rally) return
+    if (!rally || !earlier || judged.current === rally) return
     judged.current = rally
     const count = rallyCount(rally, preset.soundsPerHit)
+    const others = state.rallies.filter((r) => r !== rally)
+    const session = { sportId: config.sportId, startedAt, rallies: others }
+    const prior = summarize(
+      [...earlier, session],
+      config.sportId,
+      preset.soundsPerHit,
+      rally.endedAt,
+    )
     const judgement = judgeRally(count, {
-      best: before.best,
-      todayBest: before.todayBest,
-      sessionBest: earlierBest,
+      best: prior.best,
+      todayBest: prior.todayBest,
+      // Already in the two above.
+      sessionBest: 0,
       goal,
     })
     setVerdict({ rally, count, ...judgement })
     buzz(judgement.record || judgement.goal ? [40, 60, 40, 60, 120] : [30, 50, 30])
-  }, [state.lastEnded, earlierBest, before, preset.soundsPerHit, goal])
+  }, [
+    state.lastEnded,
+    state.rallies,
+    earlier,
+    config.sportId,
+    startedAt,
+    preset.soundsPerHit,
+    goal,
+  ])
 
   const record = useCallback(
     (endedAt: number | null, rallies: Rally[]): SessionRecord => ({
@@ -261,8 +272,8 @@ export function useLiveSession(config: LiveConfig, sensors: SensorKind[]): LiveS
     rallies: state.rallies,
     match,
     awaitingWinner: config.mode === 'match' && state.awaitingWinner,
-    best: Math.max(before.best, sessionBest),
-    todayBest: Math.max(before.todayBest, sessionBest),
+    best: standing.best,
+    todayBest: standing.todayBest,
     goal,
     verdict: inRally ? null : verdict,
     dispatch,
@@ -275,6 +286,8 @@ export function useLiveSession(config: LiveConfig, sensors: SensorKind[]): LiveS
       dispatch({ type: 'discard' })
     },
     point: (side: Side) => {
+      // The match is over: a remote button gives no more points.
+      if (match?.winner) return
       setVerdict(null)
       dispatch({ type: 'point', side, t: now() })
       buzz(15)

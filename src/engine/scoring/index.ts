@@ -53,8 +53,10 @@ export interface MatchView {
   server: Side
   winner: Side | null
   tiebreak: boolean
-  setPoint: Side | null
-  matchPoint: Side | null
+  /** Who is a point from the set: one side, or both (golden point, a capped 29–29). */
+  setPoint: Side[]
+  /** Who is a point from the match. */
+  matchPoint: Side[]
 }
 
 interface State {
@@ -105,7 +107,11 @@ function closeSet(s: State, final: Score, side: Side, setsToWin: number): void {
 }
 
 function rallyTarget(rules: RallyScoring, s: State): number {
-  const deciding = s.setsWon.A === rules.setsToWin - 1 && s.setsWon.B === rules.setsToWin - 1
+  // A one-set match has no deciding set: it is played to the full target.
+  const deciding =
+    rules.setsToWin > 1 &&
+    s.setsWon.A === rules.setsToWin - 1 &&
+    s.setsWon.B === rules.setsToWin - 1
   return deciding && rules.decidingSetPoints ? rules.decidingSetPoints : rules.pointsToWin
 }
 
@@ -202,14 +208,14 @@ export function replay(rules: ScoringRules, points: readonly Side[], firstServer
   let state = initial(firstServer)
   for (const side of points) state = step(rules, firstServer, state, side)
 
-  let setPoint: Side | null = null
-  let matchPoint: Side | null = null
+  const setPoint: Side[] = []
+  const matchPoint: Side[] = []
   if (!state.winner) {
     for (const side of ['A', 'B'] as const) {
       const after = step(rules, firstServer, state, side)
       if (after.sets.length > state.sets.length) {
-        setPoint ??= side
-        if (after.winner) matchPoint ??= side
+        setPoint.push(side)
+        if (after.winner) matchPoint.push(side)
       }
     }
   }

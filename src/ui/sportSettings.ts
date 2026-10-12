@@ -5,7 +5,7 @@
 
 import type { RallyScoring, ScoringRules, TennisScoring } from '../engine/scoring/index.ts'
 import { sport, type SportId } from '../engine/sports.ts'
-import { deleteSetting, getSetting, setSetting } from '../store/db.ts'
+import { deleteSetting, getSetting, setSetting, updateSetting } from '../store/db.ts'
 
 /** The parts of a sport's rules a player can change. */
 export type RulesPatch =
@@ -20,13 +20,16 @@ export async function loadRules(sportId: SportId): Promise<ScoringRules | null> 
   const defaults = sport(sportId).scoring
   if (!defaults) return null
   const patch = await getSetting<RulesPatch>(rulesKey(sportId), {})
-  return { ...defaults, ...patch } as ScoringRules
+  const rules = { ...defaults, ...patch } as ScoringRules
+  // A deciding set is never longer than the others: sets to 11 make it 11, not 15.
+  if (rules.kind === 'rally' && rules.decidingSetPoints !== undefined) {
+    rules.decidingSetPoints = Math.min(rules.decidingSetPoints, rules.pointsToWin)
+  }
+  return rules
 }
 
-export async function saveRules(sportId: SportId, patch: RulesPatch): Promise<void> {
-  const before = await getSetting<RulesPatch>(rulesKey(sportId), {})
-  await setSetting(rulesKey(sportId), { ...before, ...patch })
-}
+export const saveRules = (sportId: SportId, patch: RulesPatch): Promise<void> =>
+  updateSetting<RulesPatch>(rulesKey(sportId), {}, (before) => ({ ...before, ...patch }))
 
 /** Rallies after which a rally-mode session ends on its own; 0 = no limit (the default). */
 export const loadRallyLimit = (sportId: SportId): Promise<number> =>

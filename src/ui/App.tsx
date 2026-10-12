@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { BottomNav } from './components/BottomNav.tsx'
 import { ScreenBoundary } from './components/ScreenBoundary.tsx'
 import { UpdatePrompt } from './components/UpdatePrompt.tsx'
@@ -26,6 +26,18 @@ export function App() {
   useEffect(() => {
     if (route.name === 'home') void loadLive()
   }, [route.name])
+
+  // Once the live screen is left, that session is over: Forward back onto
+  // #/live must not start another one with the same setup.
+  const shown = useRef(false)
+  const onLive = route.name === 'live' && !!config
+  useEffect(() => {
+    if (onLive) shown.current = true
+    else if (shown.current && route.name !== 'live') {
+      shown.current = false
+      setConfig(null)
+    }
+  }, [onLive, route.name])
 
   // A reload (or a link) on the live screen goes back to setup rather than guessing.
   const lostSession = route.name === 'live' && !config

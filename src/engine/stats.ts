@@ -10,7 +10,12 @@ export interface SessionLike {
   rallies: Rally[]
 }
 
-/** Hits as the player counts them: some sports make two sounds per hit. */
+/**
+ * Hits as the player counts them: some sports make two sounds per hit. In
+ * table tennis the serve makes three (paddle, own side, other side), so an
+ * odd sound is never a hit of its own: rounding down, a serve and two returns
+ * (7 sounds) are 3 hits, not 4. A lone sound still shows as 1.
+ */
 export function countHits(hits: readonly Hit[], soundsPerHit: 1 | 2): number {
   let manual = 0
   let sensed = 0
@@ -18,19 +23,23 @@ export function countHits(hits: readonly Hit[], soundsPerHit: 1 | 2): number {
     if (hit.sources.includes('manual')) manual += 1
     else sensed += 1
   }
-  return manual + Math.ceil(sensed / soundsPerHit)
+  return manual + (sensed ? Math.max(1, Math.floor(sensed / soundsPerHit)) : 0)
 }
 
 /** A rally's count: the player's correction if they made one, else its hits. */
 export const rallyCount = (rally: Rally, soundsPerHit: 1 | 2): number =>
   rally.count ?? countHits(rally.hits, soundsPerHit)
 
-/** Hits per minute across a rally; null under two seconds, where it would be noise. */
-export function tempo(rally: Rally): number | null {
+/**
+ * Hits per minute across a rally, counted as the player counts them (not
+ * sounds); null under two seconds, where it would be noise.
+ */
+export function tempo(rally: Rally, soundsPerHit: 1 | 2): number | null {
   const first = rally.hits[0]
   const last = rally.hits.at(-1)
-  if (!first || !last || rally.hits.length < 2 || last.t - first.t < 2000) return null
-  return ((rally.hits.length - 1) * 60_000) / (last.t - first.t)
+  const count = rallyCount(rally, soundsPerHit)
+  if (!first || !last || count < 2 || last.t - first.t < 2000) return null
+  return ((count - 1) * 60_000) / (last.t - first.t)
 }
 
 const dayKey = (t: number): string => {

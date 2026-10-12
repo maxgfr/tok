@@ -33,7 +33,11 @@ export function matchPhrase(
   if (view.winner) return `Game, set and match, ${names[view.winner]}!`
   const server = view.server
   const receiver = other(server)
-  const suffix = view.matchPoint ? ' Match point.' : view.setPoint ? ' Set point.' : ''
+  const suffix = view.matchPoint.length
+    ? ' Match point.'
+    : view.setPoint.length
+      ? ' Set point.'
+      : ''
 
   if (rules.kind === 'tennis' && !view.tiebreak && view.games) {
     const { current } = view
