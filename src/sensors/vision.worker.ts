@@ -17,6 +17,8 @@ export type VisionRequest =
 export type VisionReply =
   | { type: 'ready'; mode: 'mediapipe' | 'motion' }
   | { type: 'ball'; t: number; ball: { x: number; y: number; score: number } | null }
+  /** The frame at `t` could not be read: the tracker is broken. */
+  | { type: 'error'; t: number }
 
 let detector: ObjectDetector | null = null
 let mode: 'mediapipe' | 'motion' = 'motion'
@@ -107,6 +109,10 @@ self.onmessage = async (event: MessageEvent<VisionRequest>) => {
     } else {
       ball = motionBall(m.bitmap)
     }
+  } catch {
+    // Unanswered, the page would wait for this frame forever.
+    post({ type: 'error', t: m.t })
+    return
   } finally {
     m.bitmap.close()
   }

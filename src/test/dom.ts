@@ -26,7 +26,13 @@ class MockAudioContext {
   currentTime = 0
   state = 'running'
 
-  async resume(): Promise<void> {}
+  async resume(): Promise<void> {
+    this.state = 'running'
+  }
+
+  async suspend(): Promise<void> {
+    this.state = 'suspended'
+  }
 
   createOscillator(): OscillatorNode {
     return {

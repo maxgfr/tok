@@ -109,9 +109,15 @@ test('with No limit, a rally waits for End rally, however long the silence', asy
     await act(async () => {
       await new Promise((r) => setTimeout(r, 50))
     })
+    // Two hits: a lone sound would not open a rally.
     act(() => {
       result.current.sense({ t: Date.now(), sources: ['audio'], confidence: 1 })
-      result.current.sense({ t: Date.now() + 300, sources: ['audio'], confidence: 1 })
+    })
+    await act(async () => {
+      vi.advanceTimersByTime(300)
+    })
+    act(() => {
+      result.current.sense({ t: Date.now(), sources: ['audio'], confidence: 1 })
     })
     await act(async () => {
       vi.advanceTimersByTime(60_000)
@@ -121,6 +127,85 @@ test('with No limit, a rally waits for End rally, however long the silence', asy
     act(() => result.current.endRally())
     expect(result.current.inRally).toBe(false)
     expect(result.current.rallies).toHaveLength(1)
+  } finally {
+    vi.useRealTimers()
+  }
+})
+
+test('a lone sound never shows as 1, and is dropped even with No limit', async () => {
+  await setSetting('autoEnd:beach-rackets', 0)
+  vi.useFakeTimers({ shouldAdvanceTime: true, toFake: TIMERS })
+  try {
+    const config = { ...DEFAULT_CONFIG, sportId: 'beach-rackets' as const, input: 'auto' as const }
+    const { result } = renderHook(() => useLiveSession(config, ['audio']))
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 50))
+    })
+    act(() => result.current.sense({ t: Date.now(), sources: ['audio'], confidence: 1 }))
+    expect(result.current.count).toBe(0)
+    expect(result.current.armed).toBe(true)
+    expect(result.current.inRally).toBe(false)
+    // Beach rackets: nothing within 2 s, nothing to keep.
+    await act(async () => {
+      vi.advanceTimersByTime(2_100)
+    })
+    expect(result.current.armed).toBe(false)
+    expect(result.current.count).toBe(0)
+    expect(result.current.rallies).toHaveLength(0)
+  } finally {
+    vi.useRealTimers()
+  }
+})
+
+test('a second sound in time opens the rally straight at 2', async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true, toFake: TIMERS })
+  try {
+    const config = { ...DEFAULT_CONFIG, sportId: 'beach-rackets' as const, input: 'auto' as const }
+    const { result } = renderHook(() => useLiveSession(config, ['audio']))
+    act(() => result.current.sense({ t: Date.now(), sources: ['audio'], confidence: 1 }))
+    await act(async () => {
+      vi.advanceTimersByTime(600)
+    })
+    act(() => result.current.sense({ t: Date.now(), sources: ['audio'], confidence: 1 }))
+    expect(result.current.inRally).toBe(true)
+    expect(result.current.count).toBe(2)
+  } finally {
+    vi.useRealTimers()
+  }
+})
+
+test("when a sensed rally ends, the previous rally's verdict never shows in its place", async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true, toFake: TIMERS })
+  try {
+    const config = { ...DEFAULT_CONFIG, sportId: 'beach-rackets' as const, input: 'auto' as const }
+    const shown: { inRally: boolean; rally: unknown }[] = []
+    const { result } = renderHook(() => {
+      const session = useLiveSession(config, ['audio'])
+      shown.push({ inRally: session.inRally, rally: session.verdict?.rally })
+      return session
+    })
+    const rally = async (hits: number) => {
+      for (let i = 0; i < hits; i += 1) {
+        act(() => result.current.sense({ t: Date.now(), sources: ['audio'], confidence: 1 }))
+        await act(async () => {
+          vi.advanceTimersByTime(500)
+        })
+      }
+      act(() => result.current.endRally())
+      await act(async () => {
+        vi.advanceTimersByTime(50)
+      })
+    }
+    await rally(3)
+    const first = result.current.rallies[0]
+    expect(result.current.verdict?.rally).toBe(first)
+    shown.length = 0
+    await rally(4)
+    expect(result.current.verdict?.rally).toBe(result.current.rallies[1])
+    // Up while the first sound waits for a second; gone for good once the rally opens.
+    const opened = shown.findIndex((s) => s.inRally)
+    expect(opened).toBeGreaterThan(0)
+    expect(shown.slice(opened).map((s) => s.rally)).not.toContain(first)
   } finally {
     vi.useRealTimers()
   }

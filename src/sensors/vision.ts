@@ -13,6 +13,8 @@ export interface VisionOptions {
   onCandidate: (candidate: HitCandidate) => void
   onGround: (t: number) => void
   onReady: (mode: 'mediapipe' | 'motion') => void
+  /** The tracker failed on a frame; no more frames are sent. */
+  onError?: () => void
 }
 
 const FRAME_MS = 66
@@ -22,8 +24,8 @@ type Mode = 'mediapipe' | 'motion'
 interface SharedWorker {
   worker: Worker
   ready: Promise<Mode>
-  /** The running session's handler for ball replies. */
-  listener: ((reply: Extract<VisionReply, { type: 'ball' }>) => void) | null
+  /** The running session's handler for frame replies. */
+  listener: ((reply: Exclude<VisionReply, { type: 'ready' }>) => void) | null
 }
 
 let shared: SharedWorker | null = null
@@ -78,6 +80,11 @@ export function startVision(opts: VisionOptions): { stop: () => void } {
     // A reply to a frame sent by an earlier session of the same worker.
     if (stopped || m.t < startedAt) return
     busy = false
+    if (m.type === 'error') {
+      stopped = true
+      opts.onError?.()
+      return
+    }
     for (const e of tracker.push(m.t, m.ball ? { t: m.t, ...m.ball } : null)) {
       if (e.type === 'hit') opts.onCandidate({ ...e.candidate, t: perfToEpoch(e.candidate.t) })
       else opts.onGround(perfToEpoch(e.t))

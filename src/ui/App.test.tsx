@@ -1,6 +1,7 @@
 import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, expect, test } from 'vitest'
+import { clearSelfNoise, isSelfNoise } from '../device/selfNoise.ts'
 import { clearAll, listSessions, setSetting } from '../store/db.ts'
 import { App } from './App.tsx'
 
@@ -39,6 +40,18 @@ test('taps count hits in a rally and the session is saved when it ends', async (
   const sessions = await listSessions()
   expect(sessions).toHaveLength(1)
   expect(sessions[0]?.rallies[0]?.hits).toHaveLength(3)
+})
+
+test('during a session, a finger on the screen is not heard as a hit', async () => {
+  const user = userEvent.setup()
+  render(<App />)
+  await user.click(await screen.findByRole('button', { name: /start table tennis/i }))
+  const tapZone = await screen.findByRole('button', { name: /add a hit/i })
+  clearSelfNoise()
+  const at = Date.now()
+  await user.click(tapZone)
+  expect(isSelfNoise(at + 100, 'audio')).toBe(true)
+  expect(isSelfNoise(at + 100, 'motion')).toBe(true)
 })
 
 test('restart puts the rally back at 0 and records nothing', async () => {

@@ -1,5 +1,10 @@
-// The rally state machine: idle → rally → (ended) → idle. Pure — the clock
-// arrives as `tick` events, so a recorded session replays exactly.
+// The rally state machine: idle → (armed) → rally → (ended) → idle. Pure — the
+// clock arrives as `tick` events, so a recorded session replays exactly.
+//
+// One sound is not a rally: a door, a voice, a paddle put down. A sensor hit
+// from idle only arms the machine; a second one within `confirmMs` opens the
+// rally with both, otherwise a tick drops it without a trace. A tap is
+// deliberate and opens the rally at once.
 
 import type { Hit, Rally, RallyEndReason } from './types.ts'
 
@@ -10,10 +15,13 @@ export interface RallyConfig {
   refractoryMs: number
   /** Rallies with fewer hits that end on their own are noise, not rallies. */
   minHits: number
+  /** How long a lone sensor hit waits for a second one before it is dropped. */
+  confirmMs: number
 }
 
 export interface RallyState {
-  phase: 'idle' | 'rally'
+  /** `armed`: one sensor hit heard, waiting for a second to open the rally. */
+  phase: 'idle' | 'armed' | 'rally'
   hits: Hit[]
 }
 
@@ -54,17 +62,30 @@ export function rallyStep(state: RallyState, event: RallyEvent, cfg: RallyConfig
     case 'hit': {
       const manual = event.hit.sources.includes('manual')
       if (last && !manual && event.hit.t - last.t < cfg.refractoryMs) return unchanged(state)
+      if (!manual && state.phase === 'idle') {
+        return unchanged({ phase: 'armed', hits: [event.hit] })
+      }
+      // The armed hit waited too long: this one arms afresh.
+      if (!manual && state.phase === 'armed' && last && event.hit.t - last.t > cfg.confirmMs) {
+        return unchanged({ phase: 'armed', hits: [event.hit] })
+      }
       return { state: { phase: 'rally', hits: [...state.hits, event.hit] }, ended: null }
     }
     case 'tick':
+      if (state.phase === 'armed' && last && event.t - last.t > cfg.confirmMs) {
+        return unchanged(idleRally())
+      }
       if (state.phase !== 'rally' || !last || event.t - last.t <= cfg.timeoutMs) {
         return unchanged(state)
       }
       return close(state, last.t, 'timeout', cfg)
     case 'end':
+      // An unconfirmed sound is not a rally to keep.
+      if (state.phase === 'armed') return unchanged(idleRally())
       if (state.phase !== 'rally') return unchanged(state)
       return close(state, event.t, event.reason, cfg)
     case 'undo': {
+      if (state.phase === 'armed') return unchanged(idleRally())
       const hits = state.hits.slice(0, -1)
       return unchanged(hits.length ? { phase: 'rally', hits } : idleRally())
     }

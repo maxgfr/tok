@@ -4,14 +4,16 @@ import type { AutoSensor, SportPreset } from '../../engine/sports.ts'
 import type { Hit, HitCandidate, SensorKind } from '../../engine/types.ts'
 import { startAudio, type AudioSensor, type TimedLevel } from '../../sensors/audio.ts'
 import { startMotion } from '../../sensors/motion.ts'
-import { isSounding } from '../../device/sounds.ts'
-import { isSpeaking } from '../../device/speech.ts'
+import { isSelfNoise, maskNoise } from '../../device/selfNoise.ts'
 import { loadMicDevice, saveMicDevice } from '../micDevice.ts'
 import { loadThreshold, loadVoiceFilter } from '../thresholds.ts'
 import { failure } from './sensorStatus.ts'
 import { useLatest } from './useLatest.ts'
 
 export type SensorStatus = 'off' | 'starting' | 'on' | 'blocked' | 'unavailable'
+
+/** How long the mic is ignored as it opens or comes back. */
+const MIC_SETTLE_MS = 1000
 
 export interface Sensors {
   status: Partial<Record<AutoSensor, SensorStatus>>
@@ -55,11 +57,19 @@ export function useSensors({ enabled, preset, onHit, onLevel }: Options) {
   useEffect(() => {
     fusion.current = new Fusion({ weights: preset.weights })
   }, [preset])
+  // The camera's tracker runs in another hook; it reports here (setVision).
+  const vision = useRef<SensorStatus>('off')
 
   const feed = (candidate: ScoredCandidate) => {
-    // tok's own voice and sounds are not hits.
-    if (candidate.source === 'audio' && (isSpeaking() || isSounding())) return
-    const hit = fusion.current?.push(candidate)
+    // tok's own voice, sounds and buzz, and a finger on the screen, are not hits.
+    if (candidate.source !== 'manual' && isSelfNoise(candidate.t, candidate.source)) return
+    const f = fusion.current
+    if (!f) return
+    // While the sport's main sensor runs, every hit must include it.
+    const { dominant } = preset
+    const main = dominant === 'audio' ? audio : dominant === 'motion' ? motion : vision.current
+    f.required = main === 'on' ? dominant : null
+    const hit = f.push(candidate)
     if (hit) handlers.current.onHit?.(hit)
   }
   const feedRef = useLatest(feed)
@@ -68,6 +78,8 @@ export function useSensors({ enabled, preset, onHit, onLevel }: Options) {
     if (!wantAudio) return
     let cancelled = false
     setAudio('starting')
+    const openedAt = Date.now()
+    let hearing = true
     void (async () => {
       try {
         const [storedThreshold, storedVoiceFilter] = await Promise.all([
@@ -84,9 +96,25 @@ export function useSensors({ enabled, preset, onHit, onLevel }: Options) {
           levels: pushed.current.levels ?? false,
           onCandidate: (c) => feedRef.current(c),
           onLevel: (l) => handlers.current.onLevel?.(l),
+          onHealth: (now) => {
+            if (cancelled) return
+            if (now && !hearing) {
+              // Nor is the one as it comes back.
+              const at = Date.now()
+              maskNoise(at, at + MIC_SETTLE_MS, ['audio'])
+            }
+            hearing = now
+            setAudio(now ? 'on' : 'starting')
+          },
+          // The track is gone: open the mic again, as for another microphone.
+          onLost: () => {
+            if (!cancelled) setMicChanges((n) => n + 1)
+          },
         })
         if (cancelled) started.stop()
         else {
+          // The mic's pop as it opens is not a hit.
+          maskNoise(openedAt, Date.now() + MIC_SETTLE_MS, ['audio'])
           audioSensor.current = started
           setAudio('on')
         }
@@ -162,6 +190,10 @@ export function useSensors({ enabled, preset, onHit, onLevel }: Options) {
         setMicChanges((n) => n + 1)
       },
       audioTrack: () => audioSensor.current?.track ?? null,
+      /** What the camera's tracker is doing: when it is the sport's main sensor, hits need it. */
+      setVision: (status: SensorStatus) => {
+        vision.current = status
+      },
       /** Feeds a candidate from another sensor (vision) into the same fusion. */
       feed: (candidate: ScoredCandidate) => feedRef.current(candidate),
     }),

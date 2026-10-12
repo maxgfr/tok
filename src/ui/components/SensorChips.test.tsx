@@ -17,6 +17,13 @@ test('without onAudio, the chips are only status', () => {
   expect(screen.getByText('Listening')).toBeTruthy()
 })
 
+test('a sound that may open a rally makes the mic chip pulse', () => {
+  const { rerender } = render(<SensorChips status={{ audio: 'on' }} heard />)
+  expect(screen.getByTestId('heard')).toBeTruthy()
+  rerender(<SensorChips status={{ audio: 'on' }} />)
+  expect(screen.queryByTestId('heard')).toBeNull()
+})
+
 test('a failed secondary sensor still gets no chip', () => {
   render(<SensorChips status={{ audio: 'on', motion: 'unavailable' }} onAudio={() => {}} />)
   expect(screen.queryByText('No motion')).toBeNull()

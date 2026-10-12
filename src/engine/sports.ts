@@ -38,6 +38,11 @@ export interface SportPreset {
    * automatic end, used until the player picks another. 0 = no limit.
    */
   rallyTimeoutMs: number
+  /**
+   * The longest gap between two hits of a rally. A lone sensor hit waits this
+   * long for a second before it counts as a rally start (engine/rally.ts).
+   */
+  maxGapMs: number
   /** Frequency band where this sport's contact sound lives. */
   bandHz: [number, number]
   /** Table tennis: the bounce on the table sounds like a hit too. */
@@ -73,6 +78,7 @@ export const SPORTS: readonly SportPreset[] = [
     weights: { audio: 1, motion: 0.4, vision: 0.2 },
     refractoryMs: 250,
     rallyTimeoutMs: 2500,
+    maxGapMs: 2000,
     bandHz: [1500, 6000],
     soundsPerHit: 1,
     scoring: null,
@@ -87,6 +93,7 @@ export const SPORTS: readonly SportPreset[] = [
     weights: { audio: 0.7, motion: 0.2, vision: 1 },
     refractoryMs: 300,
     rallyTimeoutMs: 4000,
+    maxGapMs: 3000,
     bandHz: [300, 3000],
     soundsPerHit: 1,
     scoring: VOLLEYBALL_RULES,
@@ -101,6 +108,7 @@ export const SPORTS: readonly SportPreset[] = [
     weights: { audio: 0.6, motion: 0.2, vision: 1 },
     refractoryMs: 300,
     rallyTimeoutMs: 4000,
+    maxGapMs: 3000,
     bandHz: [300, 3000],
     soundsPerHit: 1,
     scoring: { ...VOLLEYBALL_RULES, pointsToWin: 21, setsToWin: 2 },
@@ -115,6 +123,7 @@ export const SPORTS: readonly SportPreset[] = [
     weights: { audio: 0.6, motion: 0.3, vision: 1 },
     refractoryMs: 250,
     rallyTimeoutMs: 2500,
+    maxGapMs: 3000,
     bandHz: [200, 2500],
     soundsPerHit: 1,
     scoring: null,
@@ -129,6 +138,7 @@ export const SPORTS: readonly SportPreset[] = [
     weights: { audio: 1, motion: 0.3, vision: 0.1 },
     refractoryMs: 100,
     rallyTimeoutMs: 1500,
+    maxGapMs: 1200,
     bandHz: [2000, 8000],
     soundsPerHit: 2,
     scoring: {
@@ -149,6 +159,7 @@ export const SPORTS: readonly SportPreset[] = [
     weights: { audio: 1, motion: 0.3, vision: 0.3 },
     refractoryMs: 300,
     rallyTimeoutMs: 3000,
+    maxGapMs: 2000,
     bandHz: [1000, 6000],
     soundsPerHit: 1,
     scoring: { kind: 'rally', pointsToWin: 21, setsToWin: 2, winBy: 2, cap: 30, serve: 'winner' },
@@ -163,6 +174,7 @@ export const SPORTS: readonly SportPreset[] = [
     weights: { audio: 1, motion: 0.4, vision: 0.3 },
     refractoryMs: 300,
     rallyTimeoutMs: 3500,
+    maxGapMs: 3000,
     bandHz: [800, 5000],
     soundsPerHit: 1,
     scoring: TENNIS_RULES,
@@ -177,6 +189,7 @@ export const SPORTS: readonly SportPreset[] = [
     weights: { audio: 1, motion: 0.4, vision: 0.3 },
     refractoryMs: 300,
     rallyTimeoutMs: 3500,
+    maxGapMs: 3000,
     bandHz: [800, 5000],
     soundsPerHit: 1,
     scoring: TENNIS_RULES,
@@ -191,6 +204,7 @@ export const SPORTS: readonly SportPreset[] = [
     weights: { audio: 1, motion: 0.3, vision: 0.3 },
     refractoryMs: 250,
     rallyTimeoutMs: 3000,
+    maxGapMs: 2000,
     bandHz: [1000, 5000],
     soundsPerHit: 1,
     scoring: { kind: 'rally', pointsToWin: 11, setsToWin: 2, winBy: 2, serve: 'winner' },
@@ -205,6 +219,7 @@ export const SPORTS: readonly SportPreset[] = [
     weights: { audio: 1, motion: 0.2, vision: 0.6 },
     refractoryMs: 200,
     rallyTimeoutMs: 3000,
+    maxGapMs: 2500,
     bandHz: [500, 4000],
     soundsPerHit: 1,
     scoring: { kind: 'rally', pointsToWin: 21, setsToWin: 1, winBy: 2, serve: 'winner' },
@@ -219,6 +234,7 @@ export const SPORTS: readonly SportPreset[] = [
     weights: { audio: 0.4, motion: 1, vision: 0 },
     refractoryMs: 180,
     rallyTimeoutMs: 1500,
+    maxGapMs: 1000,
     bandHz: [1000, 6000],
     soundsPerHit: 1,
     scoring: null,
@@ -234,6 +250,7 @@ export const SPORTS: readonly SportPreset[] = [
     refractoryMs: 200,
     // No known rhythm: no automatic end unless the player sets one.
     rallyTimeoutMs: 0,
+    maxGapMs: 2500,
     bandHz: [500, 6000],
     soundsPerHit: 1,
     scoring: { kind: 'rally', pointsToWin: 21, setsToWin: 2, winBy: 2, serve: 'winner' },

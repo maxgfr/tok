@@ -3,10 +3,15 @@ import { describe, expect, test } from 'vitest'
 import { initialLive, liveStep, matchPoints, type LiveAction, type LiveState } from './live.ts'
 import type { RallyConfig } from './rally.ts'
 
-const CFG: RallyConfig = { timeoutMs: 2000, refractoryMs: 100, minHits: 1 }
+const CFG: RallyConfig = { timeoutMs: 2000, refractoryMs: 100, minHits: 1, confirmMs: 1200 }
 const tap = (t: number): LiveAction => ({
   type: 'hit',
   hit: { t, sources: ['manual'], confidence: 1 },
+})
+
+const heard = (t: number): LiveAction => ({
+  type: 'hit',
+  hit: { t, sources: ['audio'], confidence: 1 },
 })
 
 const run = (actions: LiveAction[]): LiveState =>
@@ -34,6 +39,30 @@ describe('live session', () => {
   test('awaitingWinner is true while the last rally has no winner', () => {
     expect(run([tap(0), { type: 'tick', t: 5000 }]).awaitingWinner).toBe(true)
     expect(run([tap(0), { type: 'point', side: 'A', t: 10 }]).awaitingWinner).toBe(false)
+  })
+
+  test('in a match, a stray sound before the point does not take it', () => {
+    const s = run([
+      tap(0),
+      { type: 'point', side: 'A', t: 500 },
+      heard(3000),
+      { type: 'point', side: 'B', t: 3500 },
+    ])
+    expect(s.rallies).toHaveLength(2)
+    expect(s.rallies[1]).toMatchObject({ hits: [], winner: 'B' })
+    expect(s.rally.phase).toBe('idle')
+    // Nor does it linger to join the next rally.
+    const next = liveStep(s, heard(3600), CFG)
+    expect(next.rally).toEqual({
+      phase: 'armed',
+      hits: [{ t: 3600, sources: ['audio'], confidence: 1 }],
+    })
+  })
+
+  test('a stray sound alone never becomes a rally', () => {
+    const s = run([heard(1000), { type: 'tick', t: 2300 }, { type: 'tick', t: 9000 }])
+    expect(s.rallies).toEqual([])
+    expect(s.awaitingWinner).toBe(false)
   })
 
   test('a point with no rally at all is recorded as an empty rally', () => {

@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import type { Side } from '../../engine/scoring/index.ts'
 import type { Hit } from '../../engine/types.ts'
+import { maskTouches } from '../../device/selfNoise.ts'
 import { useWakeLock } from '../../device/wakeLock.ts'
 import { useCoach } from '../hooks/useCoach.ts'
 import { sport } from '../../engine/sports.ts'
@@ -129,8 +130,24 @@ export function Live({ config: initial }: { config: LiveConfig }) {
   }, [session.inRally, markRally])
   // The model stays loaded while the camera goes on and off; leaving frees it.
   useEffect(() => releaseVisionWorker, [])
+  const { setVision } = sensors
+  useEffect(() => {
+    setVision(vision)
+  }, [vision, setVision])
   const [usedVision, setUsedVision] = useState(false)
   if (vision === 'on' && !usedVision) setUsedVision(true)
+  // A finger on the glass is loud to the mic: no tap (End rally, Undo…) counts as a hit.
+  useEffect(() => maskTouches(window), [])
+  // Any touch is a gesture: the moment to get back a mic iOS suspended.
+  const auto = config.input === 'auto'
+  useEffect(() => {
+    if (!auto) return
+    const resume = () => {
+      primeAudio()
+    }
+    window.addEventListener('pointerdown', resume, { capture: true })
+    return () => window.removeEventListener('pointerdown', resume, { capture: true })
+  }, [auto])
   useWakeLock()
   useCoach(config, session)
 
@@ -261,6 +278,7 @@ export function Live({ config: initial }: { config: LiveConfig }) {
             <SensorChips
               status={{ ...sensors.status, ...(vision !== 'off' ? { vision } : {}) }}
               dominant={preset.dominant}
+              heard={session.armed}
               onAudio={() => setPanelOpen(true)}
             />
             <button

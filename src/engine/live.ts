@@ -65,12 +65,14 @@ export function liveStep(state: LiveState, action: LiveAction, cfg: RallyConfig)
           )
         }
       }
+      // A lone unconfirmed sound is not part of the point.
+      const rally = state.rally.phase === 'armed' ? idleRally() : state.rally
       const last = state.rallies.at(-1)
       if (last && !last.winner) {
         return withRallies(
           state,
           [...state.rallies.slice(0, -1), { ...last, winner: action.side }],
-          state.rally,
+          rally,
         )
       }
       const empty: Rally = {
@@ -80,7 +82,7 @@ export function liveStep(state: LiveState, action: LiveAction, cfg: RallyConfig)
         endReason: 'manual',
         winner: action.side,
       }
-      return withRallies(state, [...state.rallies, empty], state.rally)
+      return withRallies(state, [...state.rallies, empty], rally)
     }
     case 'undoPoint': {
       const index = state.rallies.findLastIndex((r) => r.winner)

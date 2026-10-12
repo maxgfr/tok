@@ -1,22 +1,27 @@
 // Short sounds that confirm what tok counted, so the player can keep their
 // eyes on the ball: a click for each hit, a falling pair of notes when a rally
-// ends, a rising run for a record. Played on the shared AudioContext; while
-// one plays, Auto ignores the mic so tok never counts its own sounds.
+// ends, a rising run for a record. Played on the shared AudioContext; the mic
+// ignores the moment each one actually comes out of the speaker, so tok never
+// counts its own sounds.
 
 import { primeAudio } from '../sensors/prime.ts'
+import { maskNoise } from './selfNoise.ts'
 
 /** The mic ignores this much after a sound ends: speaker ring and room echo. */
-const GUARD_MS = 150
+const RING_MS = 80
 
-let quietAt = -Infinity
-
-/** True while tok is making a sound (and just after). */
-export const isSounding = (): boolean => performance.now() < quietAt
+/** And this much before it starts: the latency the context reports can be a little off. */
+const EARLY_MS = 20
 
 function play(notes: readonly number[], stepS: number, lengthS: number, volume: number): void {
-  quietAt = performance.now() + ((notes.length - 1) * stepS + lengthS) * 1000 + GUARD_MS
   const ctx = primeAudio()
   if (!ctx) return
+  // What is scheduled now is heard this much later: the output buffer, and
+  // over Bluetooth the radio link (150–300 ms).
+  const latencyMs = ((ctx.outputLatency || 0) + (ctx.baseLatency || 0)) * 1000
+  const heardAt = Date.now() + latencyMs
+  const lengthMs = ((notes.length - 1) * stepS + lengthS) * 1000
+  maskNoise(heardAt - EARLY_MS, heardAt + lengthMs + RING_MS, ['audio'])
   notes.forEach((frequency, i) => {
     const start = ctx.currentTime + i * stepS
     const osc = ctx.createOscillator()

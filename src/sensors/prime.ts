@@ -12,6 +12,24 @@ export function primeAudio(): AudioContext | null {
   return context
 }
 
+let users = 0
+
+/**
+ * Marks the shared context as in use (the mic, the coach's sounds) until the
+ * returned release; the last release suspends it, so an idle context does
+ * not keep the audio thread awake, nor cut a sound another user still plays.
+ */
+export function retainAudio(): () => void {
+  users += 1
+  let held = true
+  return () => {
+    if (!held) return
+    held = false
+    users -= 1
+    if (users === 0 && context?.state === 'running') void context.suspend()
+  }
+}
+
 type PermissionFn = () => Promise<'granted' | 'denied'>
 
 const requestPermission = (): PermissionFn | undefined =>

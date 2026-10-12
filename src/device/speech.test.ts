@@ -29,18 +29,44 @@ function installSynth() {
 }
 
 afterEach(() => {
+  vi.restoreAllMocks()
   vi.unstubAllGlobals()
   vi.resetModules()
 })
 
 test('a new call cancelling the previous one keeps the mic muted until the new one ends', async () => {
   const { queue } = installSynth()
-  const { speak, isSpeaking } = await import('./speech.ts')
+  const { speak } = await import('./speech.ts')
+  const { isSelfNoise } = await import('./selfNoise.ts')
   speak('23. Best today, 41.')
   speak('New record! 42.')
   await new Promise((r) => setTimeout(r, 5))
   // The first call's onend has fired; the second is still playing.
-  expect(isSpeaking(performance.now() + 10_000)).toBe(true)
+  expect(isSelfNoise(Date.now() + 1000, 'audio')).toBe(true)
   queue[0]?.onend?.()
-  expect(isSpeaking(performance.now() + 10_000)).toBe(false)
+  expect(isSelfNoise(Date.now() + 300, 'audio')).toBe(true)
+  expect(isSelfNoise(Date.now() + 1000, 'audio')).toBe(false)
+})
+
+test('when the end never comes, the mic reopens after the longest the phrase could take', async () => {
+  installSynth()
+  const { speak } = await import('./speech.ts')
+  const { isSelfNoise } = await import('./selfNoise.ts')
+  const at = Date.now()
+  // 15 characters: 15 × 80 ms + 1 s.
+  speak('New record! 42.')
+  expect(isSelfNoise(at + 2100, 'audio')).toBe(true)
+  expect(isSelfNoise(at + 2300, 'audio')).toBe(false)
+})
+
+test('a voice still talking past the estimate stays masked until it ends', async () => {
+  const { queue } = installSynth()
+  const { speak } = await import('./speech.ts')
+  const { isSelfNoise } = await import('./selfNoise.ts')
+  speak('142. Best today, 187.')
+  const late = Date.now() + 10_000
+  vi.spyOn(Date, 'now').mockReturnValue(late)
+  queue[0]?.onend?.()
+  expect(isSelfNoise(late + 300, 'audio')).toBe(true)
+  expect(isSelfNoise(late + 500, 'audio')).toBe(false)
 })

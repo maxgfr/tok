@@ -3,7 +3,7 @@ import { describe, expect, test } from 'vitest'
 import { idleRally, rallyStep, type RallyConfig, type RallyState } from './rally.ts'
 import type { Hit, SensorKind } from './types.ts'
 
-const CFG: RallyConfig = { timeoutMs: 2000, refractoryMs: 150, minHits: 1 }
+const CFG: RallyConfig = { timeoutMs: 2000, refractoryMs: 150, minHits: 1, confirmMs: 1000 }
 const hit = (t: number, source: SensorKind = 'audio'): Hit => ({
   t,
   sources: [source],
@@ -22,8 +22,8 @@ function run(events: Parameters<typeof rallyStep>[1][], cfg = CFG) {
 }
 
 describe('rally state machine', () => {
-  test('the first hit starts a rally', () => {
-    const { state } = run([{ type: 'hit', hit: hit(1000) }])
+  test('a tap starts a rally at once', () => {
+    const { state } = run([{ type: 'hit', hit: hit(1000, 'manual') }])
     expect(state.phase).toBe('rally')
     expect(state.hits).toHaveLength(1)
   })
@@ -64,7 +64,7 @@ describe('rally state machine', () => {
 
   test('a tick before the timeout changes nothing', () => {
     const { state, ended } = run([
-      { type: 'hit', hit: hit(1000) },
+      { type: 'hit', hit: hit(1000, 'manual') },
       { type: 'tick', t: 2999 },
     ])
     expect(state.phase).toBe('rally')
@@ -73,7 +73,7 @@ describe('rally state machine', () => {
 
   test('an explicit end closes the rally with its reason', () => {
     const { ended } = run([
-      { type: 'hit', hit: hit(1000) },
+      { type: 'hit', hit: hit(1000, 'manual') },
       { type: 'end', t: 1500, reason: 'ground' },
     ])
     expect(ended[0]?.endReason).toBe('ground')
@@ -110,11 +110,70 @@ describe('rally state machine', () => {
   test('a manual end keeps a short rally', () => {
     const { ended } = run(
       [
-        { type: 'hit', hit: hit(1000) },
+        { type: 'hit', hit: hit(1000, 'manual') },
         { type: 'end', t: 1200, reason: 'manual' },
       ],
       { ...CFG, minHits: 2 },
     )
     expect(ended).toHaveLength(1)
+  })
+
+  describe('a lone sensor hit is not a rally yet', () => {
+    test('it arms the machine without opening a rally', () => {
+      const { state } = run([{ type: 'hit', hit: hit(1000) }])
+      expect(state.phase).toBe('armed')
+      expect(state.hits).toEqual([hit(1000)])
+    })
+
+    test('a second sensor hit in time opens the rally with both', () => {
+      const { state } = run([
+        { type: 'hit', hit: hit(1000) },
+        { type: 'hit', hit: hit(1900) },
+      ])
+      expect(state.phase).toBe('rally')
+      expect(state.hits.map((h) => h.t)).toEqual([1000, 1900])
+    })
+
+    test('with no second hit, a tick drops it without a trace', () => {
+      const early = run([
+        { type: 'hit', hit: hit(1000) },
+        { type: 'tick', t: 2000 },
+      ])
+      expect(early.state.phase).toBe('armed')
+      const late = run([
+        { type: 'hit', hit: hit(1000) },
+        { type: 'tick', t: 2001 },
+      ])
+      expect(late.state).toEqual(idleRally())
+      expect(late.ended).toEqual([])
+    })
+
+    test('a second hit that comes too late arms afresh instead', () => {
+      const { state } = run([
+        { type: 'hit', hit: hit(1000) },
+        { type: 'hit', hit: hit(2500) },
+      ])
+      expect(state).toEqual({ phase: 'armed', hits: [hit(2500)] })
+    })
+
+    test('ending or undoing drops it', () => {
+      for (const event of [
+        { type: 'end', t: 1200, reason: 'manual' } as const,
+        { type: 'undo' } as const,
+      ]) {
+        const { state, ended } = run([{ type: 'hit', hit: hit(1000) }, event])
+        expect(state).toEqual(idleRally())
+        expect(ended).toEqual([])
+      }
+    })
+
+    test('a tap while armed opens the rally', () => {
+      const { state } = run([
+        { type: 'hit', hit: hit(1000) },
+        { type: 'hit', hit: hit(1300, 'manual') },
+      ])
+      expect(state.phase).toBe('rally')
+      expect(state.hits).toHaveLength(2)
+    })
   })
 })

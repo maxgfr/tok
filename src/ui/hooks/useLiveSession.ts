@@ -29,6 +29,8 @@ export interface LiveSession {
   /** Hits in the rally in progress (or the last one, once it ended). */
   count: number
   inRally: boolean
+  /** A sensor heard one hit and waits for a second before opening a rally. */
+  armed: boolean
   rallies: Rally[]
   match: MatchView | null
   awaitingWinner: boolean
@@ -74,6 +76,7 @@ export function useLiveSession(config: LiveConfig, sensors: SensorKind[]): LiveS
       refractoryMs: preset.refractoryMs,
       // Taps are deliberate; a lone sensor blip is noise. In a match an ace is real.
       minHits: config.mode === 'match' || config.input === 'manual' ? 1 : 2,
+      confirmMs: preset.maxGapMs,
     }),
     [preset, config.mode, config.input, autoEnd],
   )
@@ -114,16 +117,25 @@ export function useLiveSession(config: LiveConfig, sensors: SensorKind[]): LiveS
   }, [id, config.sportId, preset.soundsPerHit, startedAt])
 
   // A rally ends when the player says so (End rally, a point, a remote button).
-  // Only if they turned on "end rallies on their own" does a timer, armed for
-  // the moment the silence gets that long, end it for them.
-  const lastHitAt =
-    autoEnd > 0 && state.rally.phase === 'rally' ? state.rally.hits.at(-1)?.t : undefined
-  const { timeoutMs } = rallyConfig
+  // Only if they turned on "end rallies on their own" does a timer, set for
+  // the moment the silence gets that long, end it for them. A lone sensor hit
+  // waiting for a second one always gets a timer: unconfirmed, it is dropped.
+  const { phase } = state.rally
+  const lastHitAt = state.rally.hits.at(-1)?.t
+  const { timeoutMs, confirmMs } = rallyConfig
+  const deadline =
+    lastHitAt === undefined
+      ? undefined
+      : phase === 'armed'
+        ? lastHitAt + confirmMs
+        : phase === 'rally' && autoEnd > 0
+          ? lastHitAt + timeoutMs
+          : undefined
   useEffect(() => {
-    if (lastHitAt === undefined) return
+    if (deadline === undefined) return
     let timer = 0
     const arm = () => {
-      const wait = Math.max(20, lastHitAt + timeoutMs - now() + 20)
+      const wait = Math.max(20, deadline - now() + 20)
       timer = window.setTimeout(() => {
         dispatch({ type: 'tick', t: now() })
         // Still open (the clock moved back): look again.
@@ -132,7 +144,7 @@ export function useLiveSession(config: LiveConfig, sensors: SensorKind[]): LiveS
     }
     arm()
     return () => window.clearTimeout(timer)
-  }, [lastHitAt, timeoutMs])
+  }, [deadline])
 
   // The session's best, and its best before the rally that just ended (what
   // that rally is judged against): one pass over the rallies.
@@ -190,6 +202,10 @@ export function useLiveSession(config: LiveConfig, sensors: SensorKind[]): LiveS
   }, [state.rallies, record])
 
   const inRally = state.rally.phase === 'rally'
+  // The last verdict goes once the next rally opens, not on its first sound:
+  // a lone sound may never become a rally. Gone before that rally ends, it
+  // cannot be called again in its place.
+  if (inRally && verdict) setVerdict(null)
   const current = inRally ? state.rally.hits : (state.lastEnded?.hits ?? [])
   const count = countHits(current, preset.soundsPerHit)
 
@@ -209,7 +225,6 @@ export function useLiveSession(config: LiveConfig, sensors: SensorKind[]): LiveS
   }, [])
 
   const sense = useCallback((hit: Hit) => {
-    setVerdict(null)
     // A clock glitch must never stamp a hit in the future: the rally would
     // wait for it and never time out.
     dispatch({ type: 'hit', hit: { ...hit, t: Math.min(hit.t, now()) } })
@@ -240,6 +255,7 @@ export function useLiveSession(config: LiveConfig, sensors: SensorKind[]): LiveS
     id,
     count,
     inRally,
+    armed: phase === 'armed',
     rallies: state.rallies,
     match,
     awaitingWinner: config.mode === 'match' && state.awaitingWinner,
