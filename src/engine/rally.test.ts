@@ -62,6 +62,39 @@ describe('rally state machine', () => {
     ])
   })
 
+  test('a hit after the silence starts afresh even when the tick is late', () => {
+    // The timeout tick never came (a throttled page): the next sound is not the
+    // old rally's 4th hit, it ends that rally and arms a new one.
+    const { state, ended } = run([500, 1000, 1500, 5000].map((t) => ({ type: 'hit', hit: hit(t) })))
+    expect(ended.map((r) => [r.hits.length, r.endedAt, r.endReason])).toEqual([
+      [3, 1500, 'timeout'],
+    ])
+    expect(state).toEqual({ phase: 'armed', hits: [hit(5000)] })
+  })
+
+  test('a late tap after the silence opens the next rally at once', () => {
+    const { state, ended } = run([
+      { type: 'hit', hit: hit(500) },
+      { type: 'hit', hit: hit(1000) },
+      { type: 'hit', hit: hit(5000, 'manual') },
+    ])
+    expect(ended).toHaveLength(1)
+    expect(state).toEqual({ phase: 'rally', hits: [hit(5000, 'manual')] })
+  })
+
+  test('with no timeout, only the player ends a rally: a late hit joins it', () => {
+    const cfg = { ...CFG, timeoutMs: 0 }
+    const { state, ended } = run(
+      [
+        ...[500, 1000, 9000].map((t) => ({ type: 'hit' as const, hit: hit(t) })),
+        { type: 'tick', t: 60_000 },
+      ],
+      cfg,
+    )
+    expect(ended).toEqual([])
+    expect(state.hits.map((h) => h.t)).toEqual([500, 1000, 9000])
+  })
+
   test('a tick before the timeout changes nothing', () => {
     const { state, ended } = run([
       { type: 'hit', hit: hit(1000, 'manual') },

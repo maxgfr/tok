@@ -13,7 +13,7 @@
 import type { Hit, Rally, RallyEndReason } from './types.ts'
 
 export interface RallyConfig {
-  /** No hit for this long ends the rally. */
+  /** No hit for this long ends the rally; 0: only the player ends it. */
   timeoutMs: number
   /** Sensor hits closer than this to the previous one are echoes, not hits. */
   refractoryMs: number
@@ -59,6 +59,9 @@ export const idleRally = (): RallyState => ({ phase: 'idle', hits: [] })
 
 const unchanged = (state: RallyState): RallyTransition => ({ state, ended: null })
 
+const timedOut = (silenceMs: number, cfg: RallyConfig): boolean =>
+  cfg.timeoutMs > 0 && silenceMs > cfg.timeoutMs
+
 function close(
   state: RallyState,
   endedAt: number,
@@ -78,6 +81,12 @@ export function rallyStep(state: RallyState, event: RallyEvent, cfg: RallyConfig
   const last = state.hits.at(-1)
   switch (event.type) {
     case 'hit': {
+      // The silence already ended this rally, even if the tick that says so is
+      // late (a busy or throttled page): close it, then start afresh.
+      if (state.phase === 'rally' && last && timedOut(event.hit.t - last.t, cfg)) {
+        const closed = close(state, last.t, 'timeout', cfg)
+        return { state: rallyStep(closed.state, event, cfg).state, ended: closed.ended }
+      }
       const manual = event.hit.sources.includes('manual')
       if (last && !manual && event.hit.t - last.t < cfg.refractoryMs) return unchanged(state)
       if (
@@ -103,7 +112,7 @@ export function rallyStep(state: RallyState, event: RallyEvent, cfg: RallyConfig
       if (state.phase === 'armed' && last && event.t - last.t > cfg.confirmMs) {
         return unchanged(idleRally())
       }
-      if (state.phase !== 'rally' || !last || event.t - last.t <= cfg.timeoutMs) {
+      if (state.phase !== 'rally' || !last || !timedOut(event.t - last.t, cfg)) {
         return unchanged(state)
       }
       return close(state, last.t, 'timeout', cfg)

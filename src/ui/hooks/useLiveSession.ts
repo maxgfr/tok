@@ -83,7 +83,8 @@ export function useLiveSession(config: LiveConfig, sensors: SensorKind[]): LiveS
   }, [config.sportId])
   const rallyConfig = useMemo<RallyConfig>(
     () => ({
-      timeoutMs: autoEnd > 0 ? autoEnd * 1000 : preset.rallyTimeoutMs,
+      // 0: rallies end only when the player says so.
+      timeoutMs: autoEnd * 1000,
       refractoryMs: preset.refractoryMs,
       // Taps are deliberate; a lone sensor blip is noise. In a match an ace is real.
       minHits: config.mode === 'match' || config.input === 'manual' ? 1 : 2,
