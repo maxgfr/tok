@@ -61,3 +61,29 @@ test('a rally clip is shared from its own tap, once it is cut', async () => {
     expect.objectContaining({ files: [expect.objectContaining({ type: 'video/mp4' })] }),
   )
 })
+
+test('leaving the screen stops a clip being cut', async () => {
+  const { exportClip } = await import('../../record/clip.ts')
+  let signal: AbortSignal | undefined
+  vi.mocked(exportClip).mockImplementationOnce(
+    (_blob, _start, _end, s) =>
+      new Promise((_, reject) => {
+        signal = s
+        s?.addEventListener('abort', () => reject(new DOMException('stopped', 'AbortError')))
+      }),
+  )
+  const user = userEvent.setup()
+  const view = render(<Replay id="s1" />)
+  await user.click(await screen.findByRole('button', { name: 'Share this rally' }))
+  await vi.waitFor(() => expect(signal).toBeDefined())
+  view.unmount()
+  expect(signal?.aborted).toBe(true)
+})
+
+test('the saved file is named after the day it was played, in local time', async () => {
+  render(<Replay id="s1" />)
+  const save = await screen.findByRole('link', { name: /save/i })
+  const d = new Date(session.startedAt)
+  const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  expect(save.getAttribute('download')).toBe(`tok-beach-rackets-${day}.mp4`)
+})

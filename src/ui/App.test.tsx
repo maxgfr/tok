@@ -54,6 +54,19 @@ test('during a session, a finger on the screen is not heard as a hit', async () 
   expect(isSelfNoise(at + 100, 'motion')).toBe(true)
 })
 
+test('in pocket mode, a touch on the screen does not blind the sensors', async () => {
+  const user = userEvent.setup()
+  render(<App />)
+  await user.click(await screen.findByRole('button', { name: /start table tennis/i }))
+  await user.click(await screen.findByRole('button', { name: 'Lock the screen' }))
+  const pocket = await screen.findByLabelText(/pocket mode/i)
+  clearSelfNoise()
+  const at = Date.now()
+  await user.pointer({ keys: '[MouseLeft]', target: pocket })
+  expect(isSelfNoise(at + 100, 'audio')).toBe(false)
+  expect(isSelfNoise(at + 100, 'motion')).toBe(false)
+})
+
 test('restart puts the rally back at 0 and records nothing', async () => {
   const user = userEvent.setup()
   render(<App />)

@@ -42,7 +42,8 @@ export function tempo(rally: Rally, soundsPerHit: 1 | 2): number | null {
   return ((count - 1) * 60_000) / (last.t - first.t)
 }
 
-const dayKey = (t: number): string => {
+/** YYYY-MM-DD in the player's own time zone. */
+export const dayKey = (t: number): string => {
   const d = new Date(t)
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }

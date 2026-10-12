@@ -74,3 +74,54 @@ test('frames up to an encoder failure are kept', async () => {
   expect(ref).toMatchObject({ file: 'session-1.mp4', mimeType: 'video/mp4', bytes: 1234 })
   expect(deleteVideo).not.toHaveBeenCalled()
 })
+
+test('after an encoder failure the file cannot be finished either: what was written is kept', async () => {
+  encoder.frame.mockRejectedValueOnce(new Error('encoder reclaimed'))
+  encoder.finish.mockRejectedValueOnce(new Error('output errored'))
+  const recording = await startRecording(options(video()))
+  await new Promise((r) => setTimeout(r, 60))
+  const ref = await recording!.stop()
+  expect(ref).toMatchObject({ file: 'session-1.mp4', bytes: 1234 })
+  expect(ref!.endedAt).toBeGreaterThanOrEqual(ref!.startedAt)
+  expect(encoder.cancel).toHaveBeenCalled()
+  expect(deleteVideo).not.toHaveBeenCalled()
+})
+
+test('the file is known as soon as recording starts', async () => {
+  const recording = await startRecording(options(video()))
+  expect(recording!.ref).toMatchObject({ file: 'session-1.mp4', store: 'opfs', bytes: 0 })
+  await recording!.stop()
+})
+
+test('with sound but no audio encoder, MediaRecorder records instead, sound included', async () => {
+  const { openVideoWriter } = await import('./videoStore.ts')
+  vi.mocked(openVideoWriter).mockResolvedValue({
+    store: 'opfs',
+    write: vi.fn(),
+    close: async () => 0,
+  })
+  const started: MediaStream[] = []
+  vi.stubGlobal(
+    'MediaRecorder',
+    class {
+      static isTypeSupported = () => true
+      state = 'inactive'
+      constructor(stream: MediaStream) {
+        started.push(stream)
+      }
+      start() {}
+    },
+  )
+  HTMLCanvasElement.prototype.captureStream = () => {
+    const tracks: MediaStreamTrack[] = []
+    return {
+      getTracks: () => tracks,
+      addTrack: (t: MediaStreamTrack) => tracks.push(t),
+    } as unknown as MediaStream
+  }
+  const mic = { clone: () => ({ kind: 'audio', stop: vi.fn() }) } as unknown as MediaStreamTrack
+  const recording = await startRecording({ ...options(video()), audioTrack: mic })
+  expect(recording!.ref.file).toBe('session-1.mp4')
+  expect(started).toHaveLength(1)
+  expect(started[0]!.getTracks().map((t) => t.kind)).toEqual(['audio'])
+})

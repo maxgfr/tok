@@ -1,17 +1,18 @@
 import { useEffect, useMemo, useState } from 'react'
 import { SPORTS, sport, type SportId } from '../../engine/sports.ts'
-import { rallyCount, dailySeries, summarize } from '../../engine/stats.ts'
-import { listSessions, type SessionRecord } from '../../store/db.ts'
+import { dailySeries, summarize } from '../../engine/stats.ts'
+import { asSessionLike, listSummaries, type SessionSummary } from '../../store/db.ts'
 import { DayChart } from '../components/DayChart.tsx'
 import { fmtDate, fmtTime, plural } from '../format.ts'
 
 export function History() {
-  const [sessions, setSessions] = useState<SessionRecord[] | null>(null)
+  // Summaries: the counts of each rally, not every hit of every session.
+  const [sessions, setSessions] = useState<SessionSummary[] | null>(null)
   const [filter, setFilter] = useState<SportId | null>(null)
   const [now] = useState(() => Date.now())
 
   useEffect(() => {
-    void listSessions().then(setSessions)
+    void listSummaries().then(setSessions)
   }, [])
 
   const sports = useMemo(
@@ -19,6 +20,16 @@ export function History() {
     [sessions],
   )
   const active = filter ?? sports[0]?.id ?? null
+  const { mine, summary, series } = useMemo(() => {
+    const preset = active ? sport(active) : null
+    const mine = (sessions ?? []).filter((s) => s.sportId === active)
+    const stats = mine.map(asSessionLike)
+    return {
+      mine,
+      summary: preset ? summarize(stats, preset.id, preset.soundsPerHit, now) : null,
+      series: preset ? dailySeries(stats, preset.id, preset.soundsPerHit) : [],
+    }
+  }, [sessions, active, now])
 
   if (!sessions) return <main className="flex-1" />
 
@@ -40,9 +51,6 @@ export function History() {
   }
 
   const preset = active ? sport(active) : null
-  const mine = sessions.filter((s) => s.sportId === active)
-  const summary = preset ? summarize(mine, preset.id, preset.soundsPerHit, now) : null
-  const series = preset ? dailySeries(mine, preset.id, preset.soundsPerHit) : []
 
   return (
     <main className="safe-x safe-top mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 pb-6">
@@ -113,7 +121,7 @@ export function History() {
           </thead>
           <tbody>
             {mine.map((s) => {
-              const best = Math.max(0, ...s.rallies.map((r) => rallyCount(r, preset!.soundsPerHit)))
+              const best = Math.max(0, ...s.rallyCounts)
               return (
                 <tr key={s.id} className="border-b border-rule hover:bg-slate-2">
                   <td className="py-0">
@@ -127,9 +135,9 @@ export function History() {
                     </a>
                   </td>
                   <td className="pr-2 text-chalk-dim">{s.mode === 'match' ? 'Match' : 'Rally'}</td>
-                  <td className="figures pr-2 text-right text-xl">{s.rallies.length}</td>
+                  <td className="figures pr-2 text-right text-xl">{s.rallyCounts.length}</td>
                   <td
-                    className={`figures text-right text-xl font-extrabold ${best === summary?.best ? 'text-best' : ''}`}
+                    className={`figures text-right text-xl font-extrabold ${best > 0 && best === summary?.best ? 'text-best' : ''}`}
                   >
                     {best}
                   </td>

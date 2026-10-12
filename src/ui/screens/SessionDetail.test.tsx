@@ -51,3 +51,14 @@ test('a rally that was not one can be deleted', async () => {
   await user.click(screen.getByRole('button', { name: 'Delete rally' }))
   await expect.poll(async () => (await getSession('s1'))?.rallies.length).toBe(1)
 })
+
+test('a rally deleted by mistake comes back with Undo', async () => {
+  const user = userEvent.setup()
+  render(<SessionDetail id="s1" />)
+  await user.click(await screen.findByRole('button', { name: 'Correct rally 1' }))
+  await user.click(screen.getByRole('button', { name: 'Delete rally' }))
+  await screen.findByText('Rally 1 deleted.')
+  await user.click(screen.getByRole('button', { name: 'Undo' }))
+  await expect.poll(async () => (await getSession('s1'))?.rallies).toEqual(session.rallies)
+  expect(screen.queryByText('Rally 1 deleted.')).toBeNull()
+})

@@ -22,6 +22,11 @@ describe('chapters', () => {
     ])
   })
 
+  test('rallies played after the video ended are not in it', () => {
+    const list = chapters([rally(12_000, 20_000, 5), rally(60_000, 61_000, 2)], 10_000, 1, 30_000)
+    expect(list.map((c) => c.index)).toEqual([0])
+  })
+
   test('a rally that started before the recording is clamped to 0', () => {
     expect(chapters([rally(9_500, 12_000, 3)], 10_000, 1)[0]?.start).toBe(0)
   })

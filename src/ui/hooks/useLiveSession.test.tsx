@@ -117,6 +117,29 @@ const video: VideoRef = {
   bytes: 10,
 }
 
+test('a recording is saved with the session from the moment it starts', async () => {
+  const config = { ...DEFAULT_CONFIG, input: 'manual' as const }
+  const { result } = renderHook(() => useLiveSession(config, ['manual']))
+  act(() => result.current.addVideo(video))
+  act(() => {
+    result.current.tap()
+    result.current.endRally()
+  })
+  // A crash now would still leave the session pointing to its file.
+  await waitFor(async () => expect((await getSession(result.current.id))?.videos).toEqual([video]))
+})
+
+test('when no recording could be kept, the session points to none', async () => {
+  const config = { ...DEFAULT_CONFIG, input: 'manual' as const }
+  const { result } = renderHook(() => useLiveSession(config, ['manual']))
+  act(() => result.current.addVideo(video))
+  act(() => result.current.tap())
+  await act(async () => {
+    await result.current.finish({ videos: [] })
+  })
+  expect((await getSession(result.current.id))?.videos).toBeUndefined()
+})
+
 test('renders after finish never overwrite the final save', async () => {
   const config = { ...DEFAULT_CONFIG, input: 'manual' as const }
   const { result, rerender } = renderHook(({ sensors }) => useLiveSession(config, sensors), {

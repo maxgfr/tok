@@ -132,6 +132,7 @@ export function Live({ config: initial }: { config: LiveConfig }) {
     name: session.id,
     overlay,
     audioTrack: sensors.audioTrack,
+    onRecording: session.addVideo,
   })
   const vision = useVision({
     enabled: cameraOn && config.input === 'auto' && preset.weights.vision > 0,
@@ -185,7 +186,8 @@ export function Live({ config: initial }: { config: LiveConfig }) {
   const [usedVision, setUsedVision] = useState(false)
   if (vision === 'on' && !usedVision) setUsedVision(true)
   // A finger on the glass is loud to the mic: no tap (End rally, Undo…) counts as a hit.
-  useEffect(() => maskTouches(window), [])
+  // In pocket mode a touch is fabric, swallowed: it must not blind the sensors either.
+  useEffect(() => (pocket ? undefined : maskTouches(window)), [pocket])
   // Any touch is a gesture: the moment to get back a mic iOS suspended.
   const auto = config.input === 'auto'
   useEffect(() => {
@@ -210,9 +212,8 @@ export function Live({ config: initial }: { config: LiveConfig }) {
     ended.current = true
     const videos = await stopCamera()
     const used = [...sensors.active, ...(usedVision ? (['vision'] as const) : [])]
-    const id = hasPlay
-      ? await session.finish({ sensors: used, ...(videos.length ? { videos } : {}) })
-      : null
+    // The recordings as they ended, even none: the session drops what it had noted.
+    const id = hasPlay ? await session.finish({ sensors: used, videos }) : null
     if (!id) await Promise.all(videos.map(deleteVideo))
     return id
   }
@@ -226,7 +227,14 @@ export function Live({ config: initial }: { config: LiveConfig }) {
 
   const end = async () => {
     ended.current = true
-    const id = await close()
+    let id: string | null
+    try {
+      id = await close()
+    } catch {
+      // Not saved (the notice says so): stay, End can be tried again.
+      ended.current = false
+      return
+    }
     go(id ? `/history/${encodeURIComponent(id)}` : '/', { replace: true })
   }
 
@@ -370,6 +378,13 @@ export function Live({ config: initial }: { config: LiveConfig }) {
                   aria-label="recording"
                 />
               )}
+              {cameraStatus === 'not-recording' && (
+                <span
+                  className="absolute top-2 right-2 size-2 rounded-full border-2 border-side-b"
+                  aria-label="not recording"
+                  title="The camera works, but this browser cannot record it"
+                />
+              )}
             </button>
             <button
               type="button"
@@ -383,6 +398,14 @@ export function Live({ config: initial }: { config: LiveConfig }) {
           </>
         )}
       </header>
+      {session.saveFailed && (
+        <p
+          role="alert"
+          className="safe-x relative bg-side-b px-4 py-2 text-center font-semibold text-slate"
+        >
+          Could not save to this phone. Storage may be full.
+        </p>
+      )}
       {config.mode === 'match' && session.match ? (
         <MatchBoard session={session} config={config} />
       ) : (
