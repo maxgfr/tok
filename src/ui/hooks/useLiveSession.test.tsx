@@ -1,7 +1,14 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, expect, test, vi } from 'vitest'
 import type { SensorKind } from '../../engine/types.ts'
-import { clearAll, getSession, setSetting, type VideoRef } from '../../store/db.ts'
+import {
+  clearAll,
+  getSession,
+  saveSession,
+  setSetting,
+  type SessionRecord,
+  type VideoRef,
+} from '../../store/db.ts'
 import { DEFAULT_CONFIG } from '../config.ts'
 import { useLiveSession } from './useLiveSession.ts'
 
@@ -16,6 +23,80 @@ test('a match is played by the rules set for its sport', async () => {
 
 beforeEach(async () => {
   await clearAll()
+})
+
+const pastSession = (startedAt: number, hits: number): SessionRecord => ({
+  id: `past-${startedAt}`,
+  sportId: 'table-tennis',
+  mode: 'rally',
+  startedAt,
+  endedAt: startedAt + 60_000,
+  sensors: ['manual'],
+  rallies: [
+    {
+      startedAt,
+      endedAt: startedAt + 10_000,
+      hits: Array.from({ length: hits }, (_, i) => ({
+        t: startedAt + i * 500,
+        sources: ['manual' as const],
+        confidence: 1,
+      })),
+      endReason: 'manual',
+    },
+  ],
+  match: null,
+})
+
+test('a rally that ends before the history is read is not a false record', async () => {
+  await saveSession(pastSession(Date.now() - 86_400_000 * 3, 50))
+  const config = { ...DEFAULT_CONFIG, input: 'manual' as const }
+  const { result } = renderHook(() => useLiveSession(config, ['manual']))
+  act(() => {
+    for (let i = 0; i < 3; i += 1) result.current.tap()
+    result.current.endRally()
+  })
+  await waitFor(() => expect(result.current.verdict).not.toBeNull())
+  expect(result.current.verdict).toMatchObject({ count: 3, record: false })
+  expect(result.current.best).toBe(50)
+})
+
+test('once the match is won, no more points are given', async () => {
+  await setSetting('rules:table-tennis', { pointsToWin: 3, setsToWin: 1 })
+  const config = { ...DEFAULT_CONFIG, mode: 'match' as const, input: 'manual' as const }
+  const { result } = renderHook(() => useLiveSession(config, ['manual']))
+  await waitFor(() => expect(result.current.match).not.toBeNull())
+  for (let i = 0; i < 3; i += 1) act(() => result.current.point('A'))
+  await waitFor(() => expect(result.current.match?.winner).toBe('A'))
+  act(() => result.current.point('B'))
+  expect(result.current.rallies).toHaveLength(3)
+})
+
+test('past midnight, a rally is judged against the day it ended in', async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true, toFake: TIMERS })
+  try {
+    // Earlier that evening, a 20.
+    vi.setSystemTime(new Date(2026, 9, 12, 20, 0))
+    await saveSession(pastSession(Date.now(), 40))
+    vi.setSystemTime(new Date(2026, 9, 12, 23, 59, 50))
+    const config = { ...DEFAULT_CONFIG, sportId: 'beach-rackets' as const }
+    const session = {
+      ...pastSession(Date.now() - 3_600_000, 20),
+      sportId: 'beach-rackets' as const,
+    }
+    await saveSession(session)
+    const { result } = renderHook(() => useLiveSession(config, ['manual']))
+    await waitFor(() => expect(result.current.todayBest).toBe(20))
+    // The session started before midnight; this rally is played after: its 5 is that day's best.
+    vi.setSystemTime(new Date(2026, 9, 13, 0, 0, 10))
+    act(() => {
+      for (let i = 0; i < 5; i += 1) result.current.tap()
+      result.current.endRally()
+    })
+    await waitFor(() => expect(result.current.verdict).toMatchObject({ count: 5, todayBest: true }))
+    expect(result.current.todayBest).toBe(5)
+  } finally {
+    vi.useRealTimers()
+  }
 })
 
 // IndexedDB keeps its real setImmediate: a save queued on a fake one would

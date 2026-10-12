@@ -17,7 +17,7 @@ export interface LiveState {
   rallies: Rally[]
   /** The most recently completed rally, for the end-of-rally flash. */
   lastEnded: Rally | null
-  /** Match mode: the last rally ended and nobody has been given the point. */
+  /** Match mode: a rally ended and nobody has been given its point yet. */
   awaitingWinner: boolean
 }
 
@@ -44,7 +44,7 @@ function withRallies(state: LiveState, rallies: Rally[], rally: RallyState): Liv
     rally,
     rallies,
     lastEnded: state.rallies === rallies ? state.lastEnded : (last ?? null),
-    awaitingWinner: !!last && !last.winner,
+    awaitingWinner: rallies.some((r) => !r.winner),
   }
 }
 
@@ -60,20 +60,20 @@ export function liveStep(state: LiveState, action: LiveAction, cfg: RallyConfig)
         if (ended) {
           return withRallies(
             state,
-            [...state.rallies, { ...ended, winner: action.side }],
+            [...state.rallies, { ...ended, winner: action.side, wonAt: action.t }],
             idleRally(),
           )
         }
       }
       // A lone unconfirmed sound is not part of the point.
       const rally = state.rally.phase === 'armed' ? idleRally() : state.rally
-      const last = state.rallies.at(-1)
-      if (last && !last.winner) {
-        return withRallies(
-          state,
-          [...state.rallies.slice(0, -1), { ...last, winner: action.side }],
-          rally,
-        )
+      // The oldest rally still waiting for its point gets it: after an undo
+      // that can be an earlier one, then the next tap goes to the later one.
+      const waiting = state.rallies.findIndex((r) => !r.winner)
+      if (waiting >= 0) {
+        const rallies = [...state.rallies]
+        rallies[waiting] = { ...rallies[waiting]!, winner: action.side, wonAt: action.t }
+        return withRallies(state, rallies, rally)
       }
       const empty: Rally = {
         startedAt: action.t,
@@ -81,17 +81,25 @@ export function liveStep(state: LiveState, action: LiveAction, cfg: RallyConfig)
         hits: [],
         endReason: 'manual',
         winner: action.side,
+        wonAt: action.t,
       }
       return withRallies(state, [...state.rallies, empty], rally)
     }
     case 'undoPoint': {
-      const index = state.rallies.findLastIndex((r) => r.winner)
+      // The point given last, which is not always the last rally's: after an
+      // undo, an earlier rally can get its point after a later one.
+      let index = -1
+      state.rallies.forEach((r, i) => {
+        if (!r.winner) return
+        const latest = state.rallies[index]
+        if (!latest || (r.wonAt ?? -Infinity) >= (latest.wonAt ?? -Infinity)) index = i
+      })
       const target = state.rallies[index]
       if (!target) return state
       const rallies = [...state.rallies]
       if (target.hits.length === 0) rallies.splice(index, 1)
       else {
-        const { winner: _winner, ...rest } = target
+        const { winner: _winner, wonAt: _wonAt, ...rest } = target
         rallies[index] = rest
       }
       return { ...withRallies(state, rallies, state.rally), lastEnded: state.lastEnded }

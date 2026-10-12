@@ -168,6 +168,27 @@ test('leaving the live screen without ending still closes the session', async ()
   })
 })
 
+test('after ending, going Forward onto the live screen does not start another session', async () => {
+  const user = userEvent.setup()
+  render(<App />)
+  await user.click(await screen.findByRole('radio', { name: /^manual$/i }))
+  await user.click(await screen.findByRole('button', { name: /start table tennis/i }))
+  await user.click(await screen.findByRole('button', { name: /add a hit/i }))
+  await user.click(screen.getByRole('button', { name: /end session/i }))
+  await user.click(
+    within(screen.getByRole('group', { name: /end session/i })).getByRole('button', {
+      name: 'End',
+    }),
+  )
+  await screen.findByRole('heading', { name: 'Table tennis' })
+  act(() => {
+    window.location.hash = '#/live'
+  })
+  await screen.findByRole('button', { name: /start table tennis/i })
+  expect(screen.queryByRole('button', { name: /add a hit/i })).toBeNull()
+  expect(await listSessions()).toHaveLength(1)
+})
+
 test('after ending, Back does not reopen the live screen', async () => {
   const user = userEvent.setup()
   render(<App />)

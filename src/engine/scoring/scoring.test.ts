@@ -109,9 +109,27 @@ describe('rally-point scoring', () => {
   })
 
   test('flags set point and match point', () => {
-    expect(replay(VOLLEY, times('A', 24), 'A').setPoint).toBe('A')
-    expect(replay(BADMINTON, [...times('A', 21), ...times('A', 20)], 'A').matchPoint).toBe('A')
-    expect(replay(VOLLEY, ['A'], 'A').setPoint).toBeNull()
+    expect(replay(VOLLEY, times('A', 24), 'A').setPoint).toEqual(['A'])
+    expect(replay(BADMINTON, [...times('A', 21), ...times('A', 20)], 'A').matchPoint).toEqual(['A'])
+    expect(replay(VOLLEY, ['A'], 'A').setPoint).toEqual([])
+  })
+
+  test('at 29–29 under a cap of 30, both sides have set point', () => {
+    const tied = Array.from({ length: 29 }, () => ['A', 'B'] as const).flat()
+    const v = replay(BADMINTON, tied, 'A')
+    expect(v.current).toEqual({ A: '29', B: '29' })
+    expect(v.setPoint).toEqual(['A', 'B'])
+  })
+
+  test('a one-set match is played to the full target, not the deciding set', () => {
+    const oneSet: ScoringRules = { ...VOLLEY, setsToWin: 1 }
+    expect(replay(oneSet, times('A', 15), 'A').winner).toBeNull()
+    expect(replay(oneSet, times('A', 25), 'A').winner).toBe('A')
+  })
+
+  test('the deciding set of a longer match is still shorter', () => {
+    const toFive = [...times('A', 25), ...times('B', 25), ...times('A', 25), ...times('B', 25)]
+    expect(replay(VOLLEY, [...toFive, ...times('A', 15)], 'A').winner).toBe('A')
   })
 })
 
@@ -188,6 +206,6 @@ describe('tennis scoring', () => {
 
   test('flags match point at 40-0 in the last game', () => {
     const v = replay(TENNIS, [...times('A', 24), ...times('A', 20), ...times('A', 3)], 'A')
-    expect(v.matchPoint).toBe('A')
+    expect(v.matchPoint).toEqual(['A'])
   })
 })

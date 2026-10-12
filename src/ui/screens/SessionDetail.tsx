@@ -150,7 +150,7 @@ export function SessionDetail({ id }: { id: string }) {
           </thead>
           <tbody className="figures text-xl">
             {session.rallies.map((r, i) => {
-              const pace = tempo(r)
+              const pace = tempo(r, preset.soundsPerHit)
               const columns = match ? 6 : 5
               return [
                 <tr key={r.startedAt} className="border-b border-rule">

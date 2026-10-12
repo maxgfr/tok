@@ -27,8 +27,17 @@ describe('countHits', () => {
     expect(countHits(hits(5), 1)).toBe(5)
   })
 
-  test('two sounds per hit halves sensor hits, rounding up', () => {
-    expect(countHits(hits(5), 2)).toBe(3)
+  test('two sounds per hit halves sensor hits, rounding down', () => {
+    expect(countHits(hits(4), 2)).toBe(2)
+    // A serve (3 sounds) and two returns.
+    expect(countHits(hits(7), 2)).toBe(3)
+    expect(countHits(hits(5), 2)).toBe(2)
+    expect(countHits(hits(3), 2)).toBe(1)
+  })
+
+  test('a lone sound still shows as one hit, and none as none', () => {
+    expect(countHits(hits(1), 2)).toBe(1)
+    expect(countHits([], 2)).toBe(0)
   })
 
   test('manual taps always count one', () => {
@@ -38,7 +47,12 @@ describe('countHits', () => {
 
 describe('tempo', () => {
   test('hits per minute across a rally', () => {
-    expect(tempo(rally(11))).toBe(60)
+    expect(tempo(rally(11), 1)).toBe(60)
+  })
+
+  test('table tennis: hits per minute, not sounds', () => {
+    // 21 sounds over 20 s: 10 hits, 9 gaps.
+    expect(tempo(rally(21), 2)).toBe(27)
   })
 
   test('a rally shorter than two seconds has no meaningful tempo', () => {
@@ -48,11 +62,11 @@ describe('tempo', () => {
       hits: hits(4, 'audio', 0, 300),
       endReason: 'timeout',
     }
-    expect(tempo(quick)).toBeNull()
+    expect(tempo(quick, 1)).toBeNull()
   })
 
   test('a single hit has no tempo', () => {
-    expect(tempo(rally(1))).toBeNull()
+    expect(tempo(rally(1), 1)).toBeNull()
   })
 })
 

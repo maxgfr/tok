@@ -1,5 +1,5 @@
 import { sport, type SportId } from '../engine/sports.ts'
-import { getSetting, setSetting } from '../store/db.ts'
+import { getSetting, setSetting, setSettings } from '../store/db.ts'
 
 /** Coach preferences: spoken calls, sounds, the remote, and a goal per sport. */
 export interface CoachSettings {
@@ -29,8 +29,7 @@ export const loadAutoEnd = (sportId: SportId): Promise<number> =>
 export const saveAutoEnd = (sportId: SportId, seconds: number): Promise<void> =>
   setSetting(`autoEnd:${sportId}`, seconds)
 
-export const saveCoach = (patch: Partial<CoachSettings>): Promise<void[]> =>
-  Promise.all(Object.entries(patch).map(([k, v]) => setSetting(k, v)))
+export const saveCoach = (patch: Partial<CoachSettings>): Promise<void> => setSettings(patch)
 
 export const loadGoal = (sportId: SportId): Promise<number> => getSetting(`goal:${sportId}`, 0)
 export const saveGoal = (sportId: SportId, goal: number): Promise<void> =>
