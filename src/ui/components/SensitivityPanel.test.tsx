@@ -60,3 +60,42 @@ test('Auto is presented as experimental, with a way back to counting by hand', a
   await userEvent.click(screen.getByRole('button', { name: 'Switch to manual' }))
   expect(props.onManual).toHaveBeenCalled()
 })
+
+test('once tok knows the ball, it says how many sounds were not it, and the filter can be turned off', async () => {
+  const onToneFilter = vi.fn()
+  setup({ onToneFilter, known: 12, notYours: 4 })
+  expect(screen.getByText('Not your ball: 4')).toBeTruthy()
+  await userEvent.click(screen.getByRole('checkbox', { name: /Only my ball/ }))
+  expect(onToneFilter).toHaveBeenCalledWith(false)
+})
+
+test('while it is still learning, it says how far along it is', () => {
+  setup({ onToneFilter: vi.fn(), known: 3 })
+  expect(screen.getByText('Learning your ball: 3 of 8 hits')).toBeTruthy()
+})
+
+test('Learn my ball fills a dot per hit heard', () => {
+  setup({ onLearn: vi.fn(), lesson: { got: 2, status: 'listening' } })
+  const dots = screen.getByRole('list', { name: '2 of 6 hits heard' })
+  expect(dots.querySelectorAll('li')).toHaveLength(6)
+  expect(screen.getByRole('button', { name: 'Listening…' })).toHaveProperty('disabled', true)
+})
+
+test('Learn my ball starts on a tap', async () => {
+  const onLearn = vi.fn()
+  setup({ onLearn })
+  await userEvent.click(screen.getByRole('button', { name: 'Learn' }))
+  expect(onLearn).toHaveBeenCalled()
+})
+
+test('in Auto, the sensitivity says it is set from your hits', () => {
+  setup({ auto: true })
+  expect(screen.getByText('Auto')).toBeTruthy()
+})
+
+test('the last 20 s can be saved', async () => {
+  const onSaveTape = vi.fn()
+  setup({ onSaveTape })
+  await userEvent.click(screen.getByRole('button', { name: /Save last 20 s/ }))
+  expect(onSaveTape).toHaveBeenCalled()
+})

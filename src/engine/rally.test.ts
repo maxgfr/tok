@@ -176,4 +176,35 @@ describe('rally state machine', () => {
       expect(state.hits).toHaveLength(2)
     })
   })
+
+  describe('rhythm guard', () => {
+    const GUARD = { ...CFG, rhythmGuard: true }
+    const rally = (times: number[], cfg: RallyConfig = GUARD) =>
+      run(
+        times.map((t) => ({ type: 'hit', hit: hit(t) }) as const),
+        cfg,
+      ).state
+
+    test('once the pace is set, an echo far quicker than it is dropped', () => {
+      // 600 ms apart, then a "tok" 200 ms after the last: an echo.
+      expect(rally([0, 600, 1200, 1400, 1800]).hits.map((h) => h.t)).toEqual([0, 600, 1200, 1800])
+    })
+
+    test('a hit a little quicker than the pace still counts', () => {
+      expect(rally([0, 600, 1200, 1500]).hits).toHaveLength(4)
+    })
+
+    test('not before three hits, nor for taps, nor with the guard off', () => {
+      expect(rally([0, 600, 800]).hits).toHaveLength(3)
+      const tapped = run(
+        [
+          ...[0, 600, 1200].map((t) => ({ type: 'hit', hit: hit(t) }) as const),
+          { type: 'hit', hit: hit(1300, 'manual') },
+        ],
+        GUARD,
+      ).state
+      expect(tapped.hits).toHaveLength(4)
+      expect(rally([0, 600, 1200, 1400], CFG).hits).toHaveLength(4)
+    })
+  })
 })

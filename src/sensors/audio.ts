@@ -10,10 +10,24 @@ import type { Level } from '../engine/onset.ts'
 import type { HitCandidate } from '../engine/types.ts'
 import workletUrl from './onset.worklet.ts?worker&url'
 import { primeAudio, retainAudio } from './prime.ts'
-import type { OnsetProcessorOptions, ProcessorCommand, WorkletMessage } from './onset.worklet.ts'
+import type {
+  OnsetProcessorOptions,
+  ProcessorCommand,
+  TapeOnset,
+  WorkletMessage,
+} from './onset.worklet.ts'
+
+/** The last seconds the mic heard, and the onsets the detector found in them. */
+export interface Tape {
+  sampleRate: number
+  samples: Float32Array
+  onsets: TapeOnset[]
+}
 
 export interface AudioCandidate extends HitCandidate {
   score: number
+  /** The sound's spectral shape (engine/onset.ts), for engine/toneprint.ts. */
+  print: number[]
 }
 
 export interface TimedLevel extends Level {
@@ -29,6 +43,8 @@ export interface AudioSensor {
   setVoiceFilter: (on: boolean) => void
   /** Turns the level trace on while something draws it. */
   setLevels: (on: boolean) => void
+  /** The last 20 s of sound, with their onsets. */
+  tape: () => Promise<Tape>
   stop: () => void
 }
 
@@ -76,14 +92,20 @@ export async function startAudio(options: AudioOptions): Promise<AudioSensor> {
     channelCountMode: 'explicit',
     processorOptions,
   })
+  let tapeWanted: ((tape: Tape) => void)[] = []
   node.port.onmessage = (event: MessageEvent<WorkletMessage>) => {
     const m = event.data
-    if (m.type === 'onset') {
+    if (m.type === 'tape') {
+      const { type: _type, ...tape } = m
+      for (const resolve of tapeWanted) resolve(tape)
+      tapeWanted = []
+    } else if (m.type === 'onset') {
       options.onCandidate({
         t: toEpoch(m.age),
         source: 'audio',
         confidence: m.confidence,
         score: m.score,
+        print: m.print,
       })
     } else {
       const { type: _type, age, ...level } = m
@@ -124,6 +146,11 @@ export async function startAudio(options: AudioOptions): Promise<AudioSensor> {
     setThreshold: (value) => send({ type: 'threshold', value }),
     setVoiceFilter: (on) => send({ type: 'voiceFilter', on }),
     setLevels: (on) => send({ type: 'levels', on }),
+    tape: () =>
+      new Promise<Tape>((resolve) => {
+        tapeWanted.push(resolve)
+        send({ type: 'tape' })
+      }),
     stop: () => {
       stopped = true
       ctx.removeEventListener('statechange', check)

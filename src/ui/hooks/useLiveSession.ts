@@ -77,6 +77,8 @@ export function useLiveSession(config: LiveConfig, sensors: SensorKind[]): LiveS
       // Taps are deliberate; a lone sensor blip is noise. In a match an ace is real.
       minHits: config.mode === 'match' || config.input === 'manual' ? 1 : 2,
       confirmMs: preset.maxGapMs,
+      // Table tennis has two sounds per hit, one quick after the other.
+      rhythmGuard: preset.soundsPerHit === 1,
     }),
     [preset, config.mode, config.input, autoEnd],
   )

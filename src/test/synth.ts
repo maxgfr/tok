@@ -35,7 +35,16 @@ export interface SynthOptions {
   rumble?: number
   /** Spoken syllables mixed in: the player calling the score. */
   speech?: Syllable[]
+  /** Hand claps: a burst of broadband noise, no resonance. */
+  claps?: Burst[]
+  /** Footsteps: a dull low thump with a soft scuff. */
+  steps?: Burst[]
   seed?: number
+}
+
+export interface Burst {
+  at: number
+  gain?: number
 }
 
 export interface Syllable {
@@ -97,6 +106,8 @@ export function synth({
   noise = 0.003,
   rumble = 0,
   speech: syllables = [],
+  claps = [],
+  steps = [],
   seed = 1,
 }: SynthOptions): Float32Array {
   const out = new Float32Array(Math.round(sampleRate * seconds))
@@ -117,6 +128,21 @@ export function synth({
     }
   }
   for (const syllable of syllables) speech(out, sampleRate, syllable, rand)
+  for (const { at, gain = 0.5 } of claps) {
+    const start = Math.round(at * sampleRate)
+    for (let j = 0; j < 0.05 * sampleRate && start + j < out.length; j += 1) {
+      out[start + j]! += gain * Math.exp(-j / (0.008 * sampleRate)) * (rand() * 2 - 1)
+    }
+  }
+  for (const { at, gain = 0.5 } of steps) {
+    const start = Math.round(at * sampleRate)
+    for (let j = 0; j < 0.15 * sampleRate && start + j < out.length; j += 1) {
+      const t = j / sampleRate
+      const thump = Math.sin(2 * Math.PI * 150 * t) * Math.exp(-t / 0.03)
+      const scuff = j < 0.02 * sampleRate ? 0.15 * (rand() * 2 - 1) : 0
+      out[start + j]! += gain * (thump + scuff) * Math.min(1, j / (0.004 * sampleRate))
+    }
+  }
   return out
 }
 

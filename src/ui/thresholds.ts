@@ -6,6 +6,13 @@ import { deleteSetting, getSetting, setSetting } from '../store/db.ts'
 export const loadThreshold = (sportId: SportId): Promise<number> =>
   getSetting(`threshold:${sportId}`, DEFAULT_THRESHOLD)
 
+/**
+ * The threshold the player set for a sport, or null when they never touched
+ * the slider (or pressed Default): then tok sets it from their hits.
+ */
+export const loadStoredThreshold = (sportId: SportId): Promise<number | null> =>
+  getSetting<number | null>(`threshold:${sportId}`, null)
+
 export const saveThreshold = (sportId: SportId, value: number): Promise<void> =>
   setSetting(`threshold:${sportId}`, value)
 

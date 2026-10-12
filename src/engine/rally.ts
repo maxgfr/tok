@@ -5,6 +5,10 @@
 // from idle only arms the machine; a second one within `confirmMs` opens the
 // rally with both, otherwise a tick drops it without a trace. A tap is
 // deliberate and opens the rally at once.
+//
+// Rhythm guard: once a rally has found its pace (three hits), a sensor hit
+// far quicker than that pace is an echo, a double "tok" or the racket's frame,
+// not the next hit. Only for sports with one sound per hit.
 
 import type { Hit, Rally, RallyEndReason } from './types.ts'
 
@@ -17,6 +21,20 @@ export interface RallyConfig {
   minHits: number
   /** How long a lone sensor hit waits for a second one before it is dropped. */
   confirmMs: number
+  /** Drop sensor hits under `RHYTHM_FLOOR` of the rally's pace (one sound per hit only). */
+  rhythmGuard?: boolean
+}
+
+/** A sensor hit quicker than this share of the rally's median interval is dropped. */
+export const RHYTHM_FLOOR = 0.4
+
+function medianGap(hits: readonly Hit[]): number {
+  const gaps = hits
+    .slice(1)
+    .map((h, i) => h.t - hits[i]!.t)
+    .sort((a, b) => a - b)
+  const mid = gaps.length >> 1
+  return gaps.length % 2 ? gaps[mid]! : (gaps[mid - 1]! + gaps[mid]!) / 2
 }
 
 export interface RallyState {
@@ -62,6 +80,16 @@ export function rallyStep(state: RallyState, event: RallyEvent, cfg: RallyConfig
     case 'hit': {
       const manual = event.hit.sources.includes('manual')
       if (last && !manual && event.hit.t - last.t < cfg.refractoryMs) return unchanged(state)
+      if (
+        last &&
+        !manual &&
+        cfg.rhythmGuard &&
+        state.phase === 'rally' &&
+        state.hits.length >= 3 &&
+        event.hit.t - last.t < RHYTHM_FLOOR * medianGap(state.hits)
+      ) {
+        return unchanged(state)
+      }
       if (!manual && state.phase === 'idle') {
         return unchanged({ phase: 'armed', hits: [event.hit] })
       }
