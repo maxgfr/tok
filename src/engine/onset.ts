@@ -13,6 +13,10 @@
 // band energy, and is only reported once that energy has fallen under
 // `decayRatio` of its peak, or dropped if that has not happened within `decayMs`.
 //
+// Print: each onset carries the shape of its new energy over 16 log-spaced
+// bands from 200 Hz to 12 kHz, from the FFT already computed. A ball on a
+// paddle has its own shape; engine/toneprint.ts learns it.
+//
 // Pure TS: it runs in the AudioWorklet and in tests, and its per-frame path
 // allocates nothing.
 
@@ -42,6 +46,8 @@ export interface Onset {
   /** Peak height in MADs above the median: what calibration ranks. */
   score: number
   confidence: number
+  /** New energy per band at the peak, low to high (`PRINT_BANDS` values). */
+  print: number[]
 }
 
 export interface Level {
@@ -75,6 +81,17 @@ const ENERGY_FRAMES = 6
  * by far less, and dividing by that turns a faint puff into a "hit".
  */
 const MIN_SPREAD = 0.045
+
+/** Bands of an onset's print, log-spaced over `PRINT_HZ`. */
+export const PRINT_BANDS = 16
+const PRINT_HZ: readonly [number, number] = [200, 12_000]
+/**
+ * How fast a band's background follows its level, per frame: about 50 ms, so a
+ * word just before a hit has faded from it by the time the ball lands.
+ */
+const BG_RATE = 0.1
+/** A band's rise counts beyond this many of its usual strays: noise flickers, a hit stands out. */
+const NOISE_DEVS = 1
 
 const median = (sorted: Float32Array): number => {
   const n = sorted.length
@@ -121,6 +138,17 @@ export class OnsetDetector {
   private readonly quietFrames: number
   /** A peak waiting for its energy to decay; `framesLeft === 0` when there is none. */
   private readonly pending = { t: 0, score: 0, peakEnergy: 0, quiet: 0, framesLeft: 0 }
+  private readonly pendingPrint = new Float32Array(PRINT_BANDS)
+  /** Each band's first bin and the bin after its last. */
+  private readonly bandLo = new Int32Array(PRINT_BANDS)
+  private readonly bandHi = new Int32Array(PRINT_BANDS)
+  /** Each band's background level, a slow running average. */
+  private readonly printBg = new Float32Array(PRINT_BANDS)
+  /** How much each band's level usually strays from its background. */
+  private readonly printDev = new Float32Array(PRINT_BANDS)
+  /** This frame's print and the last one's (where a peak is confirmed), swapped each frame. */
+  private print = new Float32Array(PRINT_BANDS)
+  private prevPrint = new Float32Array(PRINT_BANDS)
 
   constructor(opts: OnsetOptions) {
     this.sr = opts.sampleRate
@@ -147,6 +175,14 @@ export class OnsetDetector {
     const frames = Math.max(16, Math.round(((opts.windowMs ?? 1000) / 1000) * (this.sr / this.hop)))
     this.history = new Float32Array(frames)
     this.scratch = new Float32Array(frames)
+    const top = this.n / 2
+    const edge = (i: number) =>
+      Math.round((PRINT_HZ[0] * (PRINT_HZ[1] / PRINT_HZ[0]) ** (i / PRINT_BANDS)) / binHz)
+    for (let b = 0; b < PRINT_BANDS; b += 1) {
+      const lo = Math.min(top - 1, Math.max(1, edge(b)))
+      this.bandLo[b] = lo
+      this.bandHi[b] = Math.min(top, Math.max(lo + 1, edge(b + 1)))
+    }
   }
 
   level(): Level {
@@ -193,6 +229,27 @@ export class OnsetDetector {
     }
     flux /= this.hi - this.lo + 1
 
+    // The print: per band, how far the level rose over the band's background,
+    // beyond its usual flicker. What was already there (wind, hiss, a crowd)
+    // cancels out.
+    const print = this.print
+    const bg = this.printBg
+    for (let b = 0; b < PRINT_BANDS; b += 1) {
+      let power = 0
+      const lo = this.bandLo[b]!
+      const hi = this.bandHi[b]!
+      for (let k = lo; k < hi; k += 1) {
+        const re = this.re[k]!
+        const im = this.im[k]!
+        power += re * re + im * im
+      }
+      const level = Math.log1p(1000 * Math.sqrt(power / (hi - lo)))
+      const dev = level - bg[b]!
+      print[b] = Math.max(0, dev - NOISE_DEVS * this.printDev[b]!)
+      bg[b] = bg[b]! + BG_RATE * dev
+      this.printDev[b] = this.printDev[b]! + BG_RATE * (Math.abs(dev) - this.printDev[b]!)
+    }
+
     // Adaptive threshold from the recent past (this frame excluded).
     const count = this.historyCount
     if (count > 0 && this.frames % STATS_EVERY === 0) {
@@ -238,7 +295,7 @@ export class OnsetDetector {
       pending.quiet = envelope <= this.decayRatio * pending.peakEnergy ? pending.quiet + 1 : 0
       if (pending.quiet >= this.quietFrames) {
         pending.framesLeft = 0
-        onset = this.onset(pending.t, pending.score)
+        onset = this.onset(pending.t, pending.score, this.pendingPrint)
       } else if (--pending.framesLeft === 0) {
         this.rejected += 1
       }
@@ -254,7 +311,9 @@ export class OnsetDetector {
       (!this.voiceFilter || envelope >= ATTACK_RISE * before)
     ) {
       this.lastOnset = prev.t
-      if (!this.voiceFilter) onset = this.onset(prev.t, prev.score)
+      // The peak frame and the one after: the click, then the ring of the ball.
+      for (let b = 0; b < PRINT_BANDS; b += 1) this.pendingPrint[b] = this.prevPrint[b]! + print[b]!
+      if (!this.voiceFilter) onset = this.onset(prev.t, prev.score, this.pendingPrint)
       else {
         // A new attack while the last one still rings: the last one never decayed.
         if (pending.framesLeft > 0) this.rejected += 1
@@ -269,10 +328,12 @@ export class OnsetDetector {
     prev.flux = flux
     prev.score = score
     prev.t = t
+    this.print = this.prevPrint
+    this.prevPrint = print
     return onset
   }
 
-  private onset(t: number, score: number): Onset {
-    return { t, score, confidence: 1 - this.threshold / score }
+  private onset(t: number, score: number, print: Float32Array): Onset {
+    return { t, score, confidence: 1 - this.threshold / score, print: Array.from(print) }
   }
 }

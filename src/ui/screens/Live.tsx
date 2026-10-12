@@ -17,6 +17,8 @@ import { maskTouches } from '../../device/selfNoise.ts'
 import { useWakeLock } from '../../device/wakeLock.ts'
 import { useCoach } from '../hooks/useCoach.ts'
 import { sport } from '../../engine/sports.ts'
+import { encodeWav } from '../../record/wav.ts'
+import { download } from '../download.ts'
 import { Count } from '../components/Count.tsx'
 import type { TracePoint } from '../components/LevelTrace.tsx'
 import { PocketMode } from '../components/PocketMode.tsx'
@@ -32,6 +34,7 @@ import { useVision } from '../hooks/useVision.ts'
 import { useSensitivity } from '../hooks/useSensitivity.ts'
 import { useLatest } from '../hooks/useLatest.ts'
 import { useSensors } from '../hooks/useSensors.ts'
+import { useToneprint } from '../hooks/useToneprint.ts'
 import type { OverlayState } from '../../record/overlay.ts'
 import { deleteVideo } from '../../record/videoStore.ts'
 import { primeAudio, primeMotion } from '../../sensors/prime.ts'
@@ -62,6 +65,7 @@ export function Live({ config: initial }: { config: LiveConfig }) {
     if (panelOpen) void loadMicDevice().then(setMicDevice)
   }, [panelOpen])
   const [rejected, setRejected] = useState(0)
+  const [notYours, setNotYours] = useState(0)
   // What the mic hears, for the sensitivity panel's trace.
   const levels = useRef<TracePoint[]>([])
   const onsets = useRef<number[]>([])
@@ -80,8 +84,19 @@ export function Live({ config: initial }: { config: LiveConfig }) {
       if (buffer.length > 600) buffer.splice(0, buffer.length - 600)
       setRejected(l.rejected)
     },
+    onNotYours: setNotYours,
   })
+  // What tok knows of the player's ball: it sets other sounds aside and the threshold.
+  const tone = useToneprint(preset.id, {
+    soundsPerHit: preset.soundsPerHit,
+    setLearner: sensors.setLearner,
+  })
+  const { setToneprint } = sensors
+  useEffect(() => {
+    setToneprint(tone.filter ? tone.model : null)
+  }, [setToneprint, tone.filter, tone.model])
   const sens = useSensitivity(preset.id, {
+    suggested: tone.suggested,
     onChange: ({ threshold, voiceFilter }) => {
       sensors.setThreshold(threshold)
       sensors.setVoiceFilter(voiceFilter)
@@ -124,6 +139,39 @@ export function Live({ config: initial }: { config: LiveConfig }) {
     preset,
     onCandidate: sensors.feed,
   })
+  // A rally surely made of real hits teaches tok the sound of the ball.
+  const lastRally = session.rallies.at(-1)
+  const { heardAt } = sensors
+  const { learnRally } = tone
+  useEffect(() => {
+    if (lastRally) learnRally(lastRally, heardAt)
+  }, [lastRally, heardAt, learnRally])
+
+  const saveTape = async () => {
+    const tape = await sensors.tape()
+    if (!tape) return
+    const name = `tok-${preset.id}-${localStamp(new Date())}`
+    download(
+      new Blob([encodeWav(tape.samples, tape.sampleRate)], { type: 'audio/wav' }),
+      `${name}.wav`,
+    )
+    const notes = {
+      sport: preset.id,
+      sampleRate: tape.sampleRate,
+      // The real number of hits in the recording, to fill in by hand for fixtures/real/.
+      hits: null,
+      onsets: tape.onsets.map(({ t, score, print }) => ({
+        t: Math.round(t * 1000) / 1000,
+        score,
+        print,
+      })),
+    }
+    download(
+      new Blob([JSON.stringify(notes, null, 2)], { type: 'application/json' }),
+      `${name}.json`,
+    )
+  }
+
   // Each rally opens on a key frame: replays and clips can cut exactly there.
   useEffect(() => {
     if (session.inRally) markRally()
@@ -345,14 +393,25 @@ export function Live({ config: initial }: { config: LiveConfig }) {
         <SensitivityPanel
           sportName={preset.name}
           sensitivity={sens.sensitivity}
+          auto={sens.auto}
           voiceFilter={sens.voiceFilter}
+          toneFilter={tone.filter}
+          onToneFilter={tone.setFilter}
+          known={tone.model?.count ?? 0}
+          notYours={notYours}
+          lesson={tone.lesson}
+          onLearn={tone.startLesson}
+          onSaveTape={() => void saveTape()}
           levels={levels}
           onsets={onsets}
           rejected={rejected}
           onSensitivity={(v) => void sens.setSensitivity(v)}
           onVoiceFilter={(on) => void sens.setVoiceFilter(on)}
           onReset={() => void sens.reset()}
-          onClose={() => setPanelOpen(false)}
+          onClose={() => {
+            tone.cancelLesson()
+            setPanelOpen(false)
+          }}
           micDevice={micDevice}
           onMicDevice={(id) => {
             setMicDevice(id)
@@ -366,6 +425,12 @@ export function Live({ config: initial }: { config: LiveConfig }) {
       )}
     </div>
   )
+}
+
+/** 2026-10-12-1932, in the player's own time zone. */
+const localStamp = (d: Date): string => {
+  const two = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())}-${two(d.getHours())}${two(d.getMinutes())}`
 }
 
 function verdictLine(session: LiveSession): { text: string; tone: string } {

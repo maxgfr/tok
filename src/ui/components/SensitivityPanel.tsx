@@ -1,5 +1,7 @@
 import { useEffect, useRef } from 'react'
+import { GUIDED_HITS, MIN_EXAMPLES } from '../../engine/toneprint.ts'
 import { plural } from '../format.ts'
+import type { Lesson } from '../hooks/useToneprint.ts'
 import { LevelTrace, type TracePoint } from './LevelTrace.tsx'
 import { MicPicker } from './MicPicker.tsx'
 import { Toggle } from './Toggle.tsx'
@@ -7,6 +9,8 @@ import { Toggle } from './Toggle.tsx'
 interface Props {
   sportName: string
   sensitivity: number
+  /** The slider was left alone: the threshold follows the player's hits. */
+  auto?: boolean
   voiceFilter: boolean
   /** Mutable buffers owned by the caller, as for `LevelTrace`. */
   levels: React.RefObject<TracePoint[]>
@@ -21,6 +25,16 @@ interface Props {
   onMicDevice: (id: string) => void
   /** Leave Auto: count by hand for the rest of the session. */
   onManual: () => void
+  /** Whether sounds unlike the player's ball are set aside. */
+  toneFilter?: boolean
+  onToneFilter?: (on: boolean) => void
+  /** Hits of the player's ball learned so far. */
+  known?: number
+  /** Sounds set aside since the mic opened because they are not the ball. */
+  notYours?: number
+  lesson?: Lesson | null
+  onLearn?: () => void
+  onSaveTape?: () => void
 }
 
 /**
@@ -41,6 +55,14 @@ export function SensitivityPanel({
   micDevice,
   onMicDevice,
   onManual,
+  auto = false,
+  toneFilter = true,
+  onToneFilter,
+  known = 0,
+  notYours = 0,
+  lesson = null,
+  onLearn,
+  onSaveTape,
 }: Props) {
   const dialog = useRef<HTMLDialogElement>(null)
 
@@ -80,6 +102,11 @@ export function SensitivityPanel({
           <div className="flex items-baseline justify-between">
             <label htmlFor="panel-sensitivity" className="font-semibold">
               Sensitivity
+              {auto && (
+                <span className="ml-2 rounded-full bg-slate-2 px-2 py-0.5 text-sm text-chalk-dim">
+                  Auto
+                </span>
+              )}
             </label>
             <output htmlFor="panel-sensitivity" className="figures text-3xl font-extrabold">
               {sensitivity}
@@ -95,7 +122,9 @@ export function SensitivityPanel({
             className="h-11 w-full"
           />
           <p className="text-sm text-chalk-dim">
-            Missing hits? Slide right. Counting footsteps and chatter? Slide left.
+            {auto
+              ? 'Auto: set from your own hits. Slide to take over; Default goes back to Auto.'
+              : 'Missing hits? Slide right. Counting footsteps and chatter? Slide left.'}
           </p>
         </div>
         <Toggle
@@ -104,6 +133,19 @@ export function SensitivityPanel({
           checked={voiceFilter}
           onChange={onVoiceFilter}
         />
+        {onToneFilter && (
+          <Toggle
+            label="Only my ball"
+            hint={
+              known >= MIN_EXAMPLES
+                ? `Not your ball: ${notYours}`
+                : `Learning your ball: ${known} of ${MIN_EXAMPLES} hits`
+            }
+            checked={toneFilter}
+            onChange={onToneFilter}
+          />
+        )}
+        {onLearn && <LearnBall lesson={lesson} onLearn={onLearn} />}
         <MicPicker value={micDevice} onChange={onMicDevice} />
         <div className="grid grid-cols-3 gap-3">
           <button
@@ -128,7 +170,55 @@ export function SensitivityPanel({
             Done
           </button>
         </div>
+        {onSaveTape && (
+          <button
+            type="button"
+            onClick={onSaveTape}
+            className="min-h-11 self-start text-sm font-semibold text-chalk-dim underline underline-offset-4 hover:text-chalk"
+          >
+            Save last 20 s (sound + what tok heard)
+          </button>
+        )}
       </div>
     </dialog>
+  )
+}
+
+const LESSON_TEXT: Record<Lesson['status'], (got: number) => string> = {
+  listening: () => `Hit the ball ${GUIDED_HITS} times, at your usual pace`,
+  learned: () => 'Got it: tok knows your ball',
+  missed: (got) => `Heard ${got} of ${GUIDED_HITS} steady hits. Try again?`,
+}
+
+/** "Learn my ball": a few hits on purpose, and tok knows the sound to count. */
+function LearnBall({ lesson, onLearn }: { lesson: Lesson | null; onLearn: () => void }) {
+  const listening = lesson?.status === 'listening'
+  return (
+    <div className="flex items-center gap-4">
+      <div className="flex flex-1 flex-col gap-1">
+        <span className="font-semibold">Learn my ball</span>
+        <span className="text-sm text-chalk-dim" aria-live="polite">
+          {lesson ? LESSON_TEXT[lesson.status](lesson.got) : 'Teach tok the sound of your hits'}
+        </span>
+        {listening && (
+          <ol className="flex gap-1.5" aria-label={`${lesson.got} of ${GUIDED_HITS} hits heard`}>
+            {Array.from({ length: GUIDED_HITS }, (_, i) => (
+              <li
+                key={i}
+                className={`size-3 rounded-full ${i < lesson.got ? 'bg-live' : 'bg-slate-3'}`}
+              />
+            ))}
+          </ol>
+        )}
+      </div>
+      <button
+        type="button"
+        onClick={onLearn}
+        disabled={listening}
+        className="min-h-12 shrink-0 rounded-xl bg-slate-2 px-4 font-semibold disabled:text-chalk-faint"
+      >
+        {lesson?.status === 'learned' ? 'Again' : listening ? 'Listening…' : 'Learn'}
+      </button>
+    </div>
   )
 }

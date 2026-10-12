@@ -5,6 +5,7 @@ import type { Hit, HitCandidate, SensorKind } from '../../engine/types.ts'
 import { startAudio, type AudioSensor, type TimedLevel } from '../../sensors/audio.ts'
 import { startMotion } from '../../sensors/motion.ts'
 import { isSelfNoise, maskNoise } from '../../device/selfNoise.ts'
+import { MIN_SIMILARITY, ready, similarity, type Toneprint } from '../../engine/toneprint.ts'
 import { loadMicDevice, saveMicDevice } from '../micDevice.ts'
 import { loadThreshold, loadVoiceFilter } from '../thresholds.ts'
 import { failure } from './sensorStatus.ts'
@@ -21,7 +22,20 @@ export interface Sensors {
   active: SensorKind[]
 }
 
-export type ScoredCandidate = HitCandidate & { score?: number }
+export type ScoredCandidate = HitCandidate & { score?: number; print?: number[] }
+
+/** A sound the mic counted: what learning the player's ball needs of it. */
+export interface HeardSound {
+  t: number
+  score: number
+  print: number[]
+}
+
+/** Sounds kept for learning: a long rally's worth. */
+const HEARD_KEPT = 400
+
+/** How far a fused hit's time may be from the sound behind it. */
+const MATCH_MS = 150
 
 interface Options {
   enabled: boolean
@@ -30,13 +44,15 @@ interface Options {
   onHit?: (hit: Hit) => void
   /** The mic level trace, while `setLevels(true)`. */
   onLevel?: (level: TimedLevel) => void
+  /** Sounds set aside so far because they are not the player's ball. */
+  onNotYours?: (count: number) => void
 }
 
 /** Starts the sensors a session uses, fuses their candidates, reports what runs. */
-export function useSensors({ enabled, preset, onHit, onLevel }: Options) {
+export function useSensors({ enabled, preset, onHit, onLevel, onNotYours }: Options) {
   const [audio, setAudio] = useState<SensorStatus>('off')
   const [motion, setMotion] = useState<SensorStatus>('off')
-  const handlers = useLatest({ onHit, onLevel })
+  const handlers = useLatest({ onHit, onLevel, onNotYours })
   const audioSensor = useRef<AudioSensor | null>(null)
   // Bumped when the player picks another microphone: the mic restarts on it.
   const [micChanges, setMicChanges] = useState(0)
@@ -59,10 +75,32 @@ export function useSensors({ enabled, preset, onHit, onLevel }: Options) {
   }, [preset])
   // The camera's tracker runs in another hook; it reports here (setVision).
   const vision = useRef<SensorStatus>('off')
+  // The player's ball, when it is known and the filter is on (setToneprint).
+  const toneprint = useRef<Toneprint | null>(null)
+  const notYours = useRef(0)
+  const heard = useRef<HeardSound[]>([])
+  // "Learn my ball": while set, the mic's sounds go here instead of the count.
+  const learner = useRef<((sound: HeardSound) => void) | null>(null)
 
   const feed = (candidate: ScoredCandidate) => {
     // tok's own voice, sounds and buzz, and a finger on the screen, are not hits.
     if (candidate.source !== 'manual' && isSelfNoise(candidate.t, candidate.source)) return
+    if (candidate.source === 'audio' && candidate.print) {
+      const sound = { t: candidate.t, score: candidate.score ?? 0, print: candidate.print }
+      if (learner.current) {
+        learner.current(sound)
+        return
+      }
+      const model = toneprint.current
+      if (ready(model) && similarity(sound.print, model) < MIN_SIMILARITY) {
+        notYours.current += 1
+        handlers.current.onNotYours?.(notYours.current)
+        return
+      }
+      heard.current.push(sound)
+      if (heard.current.length > HEARD_KEPT)
+        heard.current.splice(0, heard.current.length - HEARD_KEPT)
+    }
     const f = fusion.current
     if (!f) return
     // While the sport's main sensor runs, every hit must include it.
@@ -115,6 +153,10 @@ export function useSensors({ enabled, preset, onHit, onLevel }: Options) {
         else {
           // The mic's pop as it opens is not a hit.
           maskNoise(openedAt, Date.now() + MIC_SETTLE_MS, ['audio'])
+          // Settings pushed while it was starting.
+          const { threshold, voiceFilter } = pushed.current
+          if (threshold !== undefined) started.setThreshold(threshold)
+          if (voiceFilter !== undefined) started.setVoiceFilter(voiceFilter)
           audioSensor.current = started
           setAudio('on')
         }
@@ -190,6 +232,29 @@ export function useSensors({ enabled, preset, onHit, onLevel }: Options) {
         setMicChanges((n) => n + 1)
       },
       audioTrack: () => audioSensor.current?.track ?? null,
+      /** The mic's last 20 s and their onsets; null when the mic is off. */
+      tape: () => audioSensor.current?.tape() ?? Promise.resolve(null),
+      /** The player's ball to compare sounds with; null lets every sound through. */
+      setToneprint: (model: Toneprint | null) => {
+        toneprint.current = model
+      },
+      /** Sends the mic's sounds to `listen` instead of the count, until called with null. */
+      setLearner: (listen: ((sound: HeardSound) => void) | null) => {
+        learner.current = listen
+      },
+      /** The sounds behind these hit times, those still kept and heard by the mic. */
+      heardAt: (times: readonly number[]): HeardSound[] =>
+        times.flatMap((t) => {
+          let best: HeardSound | null = null
+          for (const s of heard.current) {
+            if (
+              Math.abs(s.t - t) <= MATCH_MS &&
+              (!best || Math.abs(s.t - t) < Math.abs(best.t - t))
+            )
+              best = s
+          }
+          return best ? [best] : []
+        }),
       /** What the camera's tracker is doing: when it is the sport's main sensor, hits need it. */
       setVision: (status: SensorStatus) => {
         vision.current = status
