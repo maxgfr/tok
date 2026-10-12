@@ -7,7 +7,14 @@ import { judgeRally } from '../../engine/judge.ts'
 import { countHits, rallyCount, summarize, type SessionLike } from '../../engine/stats.ts'
 import type { Hit, Rally, SensorKind } from '../../engine/types.ts'
 import { buzz } from '../../device/haptics.ts'
-import { deleteSession, listSessions, saveSession, type SessionRecord } from '../../store/db.ts'
+import {
+  asSessionLike,
+  deleteSession,
+  listSummaries,
+  saveSession,
+  type SessionRecord,
+  type VideoRef,
+} from '../../store/db.ts'
 import { loadAutoEnd, loadGoal } from '../coach.ts'
 import { loadRules } from '../sportSettings.ts'
 import type { LiveConfig } from '../config.ts'
@@ -52,6 +59,10 @@ export interface LiveSession {
   finish: (extra?: Partial<SessionRecord>) => Promise<string | null>
   /** Ends the session and forgets it: nothing of it stays in History. */
   discard: () => Promise<void>
+  /** A recording started: saved with the session from now on, so a crash keeps it. */
+  addVideo: (ref: VideoRef) => void
+  /** The last save failed (storage full, private mode): what was played may not be kept. */
+  saveFailed: boolean
 }
 
 /** Epoch ms. Sensor timestamps are converted to it (device/clock.ts). */
@@ -109,8 +120,9 @@ export function useLiveSession(config: LiveConfig, sensors: SensorKind[]): LiveS
 
   useEffect(() => {
     let alive = true
-    void listSessions().then((all) => {
-      if (alive) setEarlier(all.filter((s) => s.id !== id))
+    // Summaries: a few numbers per session, not every hit of every rally.
+    void listSummaries().then((all) => {
+      if (alive) setEarlier(all.filter((s) => s.id !== id).map(asSessionLike))
     })
     return () => {
       alive = false
@@ -189,6 +201,11 @@ export function useLiveSession(config: LiveConfig, sensors: SensorKind[]): LiveS
     goal,
   ])
 
+  // Recordings being made: the session points to their files while they are written.
+  const [videos, setVideos] = useState<VideoRef[]>([])
+  const addVideo = useCallback((ref: VideoRef) => setVideos((v) => [...v, ref]), [])
+  const [saveFailed, setSaveFailed] = useState(false)
+
   const record = useCallback(
     (endedAt: number | null, rallies: Rally[]): SessionRecord => ({
       id,
@@ -202,8 +219,9 @@ export function useLiveSession(config: LiveConfig, sensors: SensorKind[]): LiveS
         config.mode === 'match' && rules
           ? { rules, firstServer: config.firstServer, names: config.names }
           : null,
+      ...(videos.length ? { videos } : {}),
     }),
-    [id, config, startedAt, stableSensors, rules],
+    [id, config, startedAt, stableSensors, rules, videos],
   )
 
   // Persist as rallies complete, so a crash or a closed tab loses at most one rally.
@@ -211,7 +229,10 @@ export function useLiveSession(config: LiveConfig, sensors: SensorKind[]): LiveS
     if (finishing.current) return
     if (state.rallies.length === 0 && !savedOnce.current) return
     savedOnce.current = true
-    void saveSession(record(null, state.rallies))
+    saveSession(record(null, state.rallies)).then(
+      () => setSaveFailed(false),
+      () => setSaveFailed(true),
+    )
   }, [state.rallies, record])
 
   const inRally = state.rally.phase === 'rally'
@@ -251,7 +272,21 @@ export function useLiveSession(config: LiveConfig, sensors: SensorKind[]): LiveS
         rallies = liveStep(state, { type: 'end', t: now(), reason: 'manual' }, rallyConfig).rallies
       }
       if (rallies.length === 0) return null
-      await saveSession({ ...record(Date.now(), rallies), ...extra })
+      // The recordings as they ended are the final word: none left means none.
+      const { videos: final, ...rest } = extra ?? {}
+      const session = { ...record(Date.now(), rallies), ...rest }
+      if (final) {
+        if (final.length) session.videos = final
+        else delete session.videos
+      }
+      try {
+        await saveSession(session)
+      } catch (error) {
+        // Not saved: the session stays open, so End can be tried again.
+        finishing.current = false
+        setSaveFailed(true)
+        throw error
+      }
       return id
     },
     [state, rallyConfig, record, id],
@@ -295,5 +330,7 @@ export function useLiveSession(config: LiveConfig, sensors: SensorKind[]): LiveS
     undoPoint: () => dispatch({ type: 'undoPoint' }),
     finish,
     discard,
+    addVideo,
+    saveFailed,
   }
 }

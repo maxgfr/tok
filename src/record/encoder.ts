@@ -82,9 +82,10 @@ export async function startEncoder({
   })
   // No frameRate: it would snap timestamps to a grid, and they are exact.
   output.addVideoTrack(video)
+  let audio: MediaStreamAudioTrackSource | null = null
   if (audioTrack && codecs.audio) {
     // Zero at its own first sample, as the video is at its first frame.
-    const audio = new MediaStreamAudioTrackSource(
+    audio = new MediaStreamAudioTrackSource(
       audioTrack,
       { codec: codecs.audio, quality: QUALITY_MEDIUM },
       { timestampBase: 'zero' },
@@ -92,10 +93,18 @@ export async function startEncoder({
     output.addAudioTrack(audio)
   }
   await output.start()
+  // Sound is captured from the first frame on, not from the start of the
+  // output: otherwise it runs ahead of the picture by the camera's first delay.
+  audio?.pause()
 
   let keyFrame = false
+  let first = true
   return {
     frame: (t) => {
+      if (first) {
+        first = false
+        audio?.resume()
+      }
       const options = keyFrame ? { keyFrame: true } : undefined
       keyFrame = false
       return video.add(t, undefined, options)

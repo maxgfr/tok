@@ -9,6 +9,7 @@ import {
   getSetting,
   importAll,
   listSessions,
+  listSummaries,
   saveSession,
   setSetting,
   type SessionRecord,
@@ -59,6 +60,71 @@ describe('session store', () => {
     await saveSession(session('a', 1000))
     await deleteSession('a')
     expect(await getSession('a')).toBeUndefined()
+  })
+})
+
+describe('summaries', () => {
+  test('each session saved keeps its summary in step, without its hits', async () => {
+    await saveSession(session('a', 1000))
+    await saveSession({ ...session('b', 2000), rallies: [] })
+    expect(await listSummaries()).toEqual([
+      {
+        id: 'b',
+        sportId: 'beach-rackets',
+        mode: 'rally',
+        startedAt: 2000,
+        rallyCounts: [],
+        rallyStarts: [],
+        videoFiles: [],
+      },
+      {
+        id: 'a',
+        sportId: 'beach-rackets',
+        mode: 'rally',
+        startedAt: 1000,
+        rallyCounts: [1],
+        rallyStarts: [1000],
+        videoFiles: [],
+      },
+    ])
+    await deleteSession('a')
+    expect((await listSummaries()).map((s) => s.id)).toEqual(['b'])
+  })
+
+  test("a corrected rally counts as the player's count; table tennis counts hits, not sounds", async () => {
+    const corrected = session('c', 1000)
+    corrected.rallies[0] = { ...corrected.rallies[0]!, count: 12 }
+    await saveSession(corrected)
+    const tt: SessionRecord = {
+      ...session('t', 2000),
+      sportId: 'table-tennis',
+      rallies: [
+        {
+          startedAt: 2000,
+          endedAt: 4000,
+          hits: [0, 210, 420, 630].map((dt) => ({
+            t: 2000 + dt,
+            sources: ['audio'],
+            confidence: 1,
+          })),
+          endReason: 'timeout',
+        },
+      ],
+    }
+    await saveSession(tt)
+    const byId = Object.fromEntries((await listSummaries()).map((s) => [s.id, s.rallyCounts]))
+    expect(byId).toEqual({ c: [12], t: [2] })
+  })
+
+  test('imported sessions get their summaries', async () => {
+    await importAll({
+      app: 'tok',
+      version: 1,
+      exportedAt: '',
+      sessions: [session('i', 5)],
+      settings: {},
+    })
+    expect((await listSummaries()).map((s) => s.id)).toEqual(['i'])
   })
 })
 
@@ -121,9 +187,14 @@ describe('import safety', () => {
         session('ok', 1000),
         { ...session('curling', 2000), sportId: 'curling' },
         { id: 'broken' },
+        { ...session('bad-rally', 3000), rallies: [{ startedAt: 'yesterday', hits: null }] },
+        {
+          ...session('bad-hit', 4000),
+          rallies: [{ ...session('x', 1).rallies[0], hits: [{ t: 1, sources: ['laser'] }] }],
+        },
       ]),
     )
-    expect(result).toEqual({ sessions: 1, skipped: 2 })
+    expect(result).toEqual({ sessions: 1, skipped: 4 })
     expect((await listSessions()).map((s) => s.id)).toEqual(['ok'])
   })
 

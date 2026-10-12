@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, Download, Play, Share2, Trophy } from 'lucide-react'
 import { sport } from '../../engine/sports.ts'
+import { dayKey } from '../../engine/stats.ts'
 import { chapters, type Chapter } from '../../record/chapters.ts'
 import { readVideo } from '../../record/videoStore.ts'
 import { chaptersVtt } from '../../record/vtt.ts'
@@ -23,33 +24,53 @@ export function Replay({ id }: { id: string }) {
     void getSession(id).then((s) => setSession(s ?? null))
   }, [id])
 
+  // Object URLs are made in effects, where their cleanup is sure to run: a memo
+  // may be computed twice (StrictMode) and leak the first.
+  const [url, setUrl] = useState<string | null>(null)
+  useEffect(() => () => (url ? URL.revokeObjectURL(url) : undefined), [url])
   const ref = session?.videos?.[part]
   useEffect(() => {
     if (!ref) return
     let alive = true
     void readVideo(ref).then((b) => {
-      if (alive) setBlob(b)
+      if (!alive) return
+      setBlob(b)
+      setUrl(b ? URL.createObjectURL(b) : null)
     })
     return () => {
       alive = false
     }
   }, [ref])
-
-  const url = useMemo(() => (blob ? URL.createObjectURL(blob) : null), [blob])
-  useEffect(() => () => (url ? URL.revokeObjectURL(url) : undefined), [url])
+  // Leaving the screen stops a clip being cut.
+  const cuts = useRef<AbortController | null>(null)
+  useEffect(() => () => cuts.current?.abort(), [])
 
   const marks = useMemo(() => {
     if (!session || !ref) return []
-    return chapters(session.rallies, ref.startedAt, sport(session.sportId).soundsPerHit)
+    return chapters(
+      session.rallies,
+      ref.startedAt,
+      sport(session.sportId).soundsPerHit,
+      ref.endedAt,
+    )
   }, [session, ref])
 
   // Captions name each rally as it plays.
-  const captions = useMemo(() => {
-    if (!session || marks.length === 0) return null
-    const vtt = chaptersVtt(marks, sport(session.sportId).unit)
-    return URL.createObjectURL(new Blob([vtt], { type: 'text/vtt' }))
-  }, [session, marks])
-  useEffect(() => () => (captions ? URL.revokeObjectURL(captions) : undefined), [captions])
+  const vtt = useMemo(
+    () => (session && marks.length ? chaptersVtt(marks, sport(session.sportId).unit) : null),
+    [session, marks],
+  )
+  const track = useRef<HTMLTrackElement>(null)
+  useEffect(() => {
+    const el = track.current
+    if (!el || !vtt) return
+    const made = URL.createObjectURL(new Blob([vtt], { type: 'text/vtt' }))
+    el.src = made
+    return () => {
+      el.removeAttribute('src')
+      URL.revokeObjectURL(made)
+    }
+  }, [vtt, url])
 
   if (session === undefined) return <main className="flex-1" />
   if (!session || !session.videos?.length) {
@@ -72,7 +93,8 @@ export function Replay({ id }: { id: string }) {
   const preset = sport(session.sportId)
   const best = marks.find((c) => c.best)
   const ext = ref?.mimeType.includes('mp4') ? 'mp4' : 'webm'
-  const fileName = `tok-${session.sportId}-${new Date(session.startedAt).toISOString().slice(0, 10)}.${ext}`
+  // The day it was played where it was played, not in UTC.
+  const fileName = `tok-${session.sportId}-${dayKey(session.startedAt)}.${ext}`
 
   const seek = (seconds: number) => {
     const v = player.current
@@ -95,16 +117,17 @@ export function Replay({ id }: { id: string }) {
     }
   }
 
-  /** Cuts one rally into its own MP4, then shares it (or saves it where sharing files is not possible). */
   /** Cuts one rally into its own MP4, ready to share or save. */
   const cutRally = async (c: Chapter) => {
     if (!blob || cutting) return
     setCutting(true)
     setClip(null)
     setMessage('Cutting the clip…')
+    const controller = new AbortController()
+    cuts.current = controller
     try {
       const { exportClip } = await import('../../record/clip.ts')
-      const cut = await exportClip(blob, c.start, c.end)
+      const cut = await exportClip(blob, c.start, c.end, controller.signal)
       const name = fileName.replace(/\.(mp4|webm)$/, `-rally-${c.index + 1}.mp4`)
       const file = new File([cut], name, { type: 'video/mp4' })
       setClip({
@@ -114,9 +137,11 @@ export function Replay({ id }: { id: string }) {
       })
       setMessage(null)
     } catch {
+      // Left the screen: nothing to say.
+      if (controller.signal.aborted) return
       setMessage('This rally could not be cut. Share or save the whole video instead.')
     } finally {
-      setCutting(false)
+      if (!controller.signal.aborted) setCutting(false)
     }
   }
 
@@ -158,6 +183,7 @@ export function Replay({ id }: { id: string }) {
               aria-selected={i === part}
               onClick={() => {
                 setBlob(undefined)
+                setUrl(null)
                 setPart(i)
               }}
               className={`min-h-11 rounded-lg px-4 font-semibold ${i === part ? 'bg-chalk text-slate' : 'bg-slate-2 text-chalk-dim'}`}
@@ -181,7 +207,7 @@ export function Replay({ id }: { id: string }) {
           className="aspect-video w-full rounded-lg bg-black"
           aria-label="Session recording"
         >
-          <track kind="captions" src={captions ?? undefined} srcLang="en" label="Rallies" default />
+          <track ref={track} kind="captions" srcLang="en" label="Rallies" default />
         </video>
       )}
 

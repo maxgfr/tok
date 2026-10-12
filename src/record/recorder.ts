@@ -10,6 +10,8 @@ import { deleteVideo, openVideoSink, openVideoWriter } from './videoStore.ts'
 import type { VideoRef } from '../store/db.ts'
 
 export interface Recording {
+  /** The file being written, as a session refers to it while it is recorded. */
+  ref: VideoRef
   stop: () => Promise<VideoRef | null>
   /** A rally is starting: the next frame is a key frame, so a clip can start there. */
   markRally: () => void
@@ -90,6 +92,8 @@ async function startEncoded(opts: Options): Promise<Recording | null> {
   const { pickCodecs, startEncoder } = await import('./encoder.ts')
   const codecs = await pickCodecs(canvas.width, canvas.height, !!opts.audioTrack)
   if (!codecs) return null
+  // No audio encoder (older Safari): MediaRecorder keeps the sound.
+  if (opts.audioTrack && !codecs.audio && typeof MediaRecorder !== 'undefined') return null
 
   const file = `${opts.name}.mp4`
   const sink = await openVideoSink(file)
@@ -110,6 +114,7 @@ async function startEncoded(opts: Options): Promise<Recording | null> {
   }
 
   let startedAt = 0
+  let endedAt = 0
   let firstPerf = 0
   let firstMedia: number | null = null
   let lastT = -1
@@ -129,6 +134,7 @@ async function startEncoded(opts: Options): Promise<Recording | null> {
     if (t <= lastT) t = (now - firstPerf) / 1000
     if (t <= lastT) return
     lastT = t
+    endedAt = startedAt + (now - firstPerf)
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
     drawOverlay(ctx, canvas.width, canvas.height, opts.overlay())
     pending = encoder.frame(t).then(
@@ -143,21 +149,33 @@ async function startEncoded(opts: Options): Promise<Recording | null> {
   })
 
   return {
+    ref: { file, store: sink.store, mimeType: 'video/mp4', startedAt: Date.now(), bytes: 0 },
     markRally: () => encoder.keyFrameNext(),
     stop: async () => {
       stopLoop()
       await pending
-      const ref: VideoRef = { file, store: sink.store, mimeType: 'video/mp4', startedAt, bytes: 0 }
+      const ref: VideoRef = {
+        file,
+        store: sink.store,
+        mimeType: 'video/mp4',
+        startedAt,
+        endedAt,
+        bytes: 0,
+      }
       try {
         if (!startedAt) throw new Error('nothing recorded')
-        // After an encoder failure, what was encoded up to it is still a video.
         await encoder.finish()
         return { ...ref, bytes: await sink.saved }
       } catch {
         await encoder.cancel().catch(() => {})
-        // Cancelling closes the sink, which saves what it holds: wait for that,
-        // then remove it, so no file is left that no session points to.
-        await Promise.race([sink.saved.catch(() => 0), new Promise((r) => setTimeout(r, 2000))])
+        // Cancelling closes the sink, which saves what it holds: wait for that.
+        const bytes = await Promise.race([
+          sink.saved.catch(() => 0),
+          new Promise<number>((r) => setTimeout(() => r(0), 2000)),
+        ])
+        // After an encoder failure, the fragments written up to it are still a video.
+        if (failed && startedAt && bytes > 0) return { ...ref, bytes }
+        // Otherwise remove it, so no file is left that no session points to.
         await deleteVideo(ref)
         return null
       } finally {
@@ -203,6 +221,7 @@ async function startMediaRecorder(opts: Options): Promise<Recording | null> {
   recorder.start(1000)
 
   return {
+    ref: { file, store: writer.store, mimeType: format.mimeType, startedAt, bytes: 0 },
     markRally: () => {},
     stop: () =>
       new Promise((resolve) => {
@@ -213,7 +232,14 @@ async function startMediaRecorder(opts: Options): Promise<Recording | null> {
             (bytes) =>
               resolve(
                 bytes
-                  ? { file, store: writer.store, mimeType: format.mimeType, startedAt, bytes }
+                  ? {
+                      file,
+                      store: writer.store,
+                      mimeType: format.mimeType,
+                      startedAt,
+                      endedAt: Date.now(),
+                      bytes,
+                    }
                   : null,
               ),
             () => resolve(null),

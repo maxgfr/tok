@@ -1,9 +1,18 @@
-// Where recordings live. OPFS when the browser can stream into it (chunks go
-// straight to disk, not RAM); otherwise the chunks are kept and saved as one
-// Blob in IndexedDB at the end (Safari). Appended chunks come from
-// MediaRecorder, positioned ones from the MP4 muxer.
+// Where recordings live. OPFS when the browser can stream into it; otherwise
+// (iOS) each chunk goes to IndexedDB as it comes and the file is put back
+// together when read. Either way a long session never sits in RAM. Appended
+// chunks come from MediaRecorder, positioned ones from the MP4 muxer.
 
-import { deleteVideoBlob, getVideoBlob, putVideoBlob, type VideoRef } from '../store/db.ts'
+import {
+  deleteVideoBlob,
+  deleteVideoChunks,
+  getVideoBlob,
+  getVideoChunks,
+  listSummaries,
+  listVideoKeys,
+  putVideoChunk,
+  type VideoRef,
+} from '../store/db.ts'
 
 const DIR = 'recordings'
 
@@ -44,14 +53,19 @@ export async function openVideoWriter(file: string): Promise<VideoWriter> {
       },
     }
   }
-  const chunks: Blob[] = []
+  let seq = 0
+  let bytes = 0
+  let queue: Promise<void> = Promise.resolve()
   return {
     store: 'idb',
-    write: (chunk) => chunks.push(chunk),
+    write: (chunk) => {
+      const record = { file, seq: seq++, position: bytes, data: chunk, at: Date.now() }
+      bytes += chunk.size
+      queue = queue.then(() => putVideoChunk(record))
+    },
     close: async () => {
-      const blob = new Blob(chunks, { type: chunks[0]?.type ?? 'video/webm' })
-      await putVideoBlob(file, blob)
-      return blob.size
+      await queue
+      return bytes
     },
   }
 }
@@ -112,30 +126,53 @@ export async function openVideoSink(file: string): Promise<VideoSink> {
       }),
     }
   }
-  // Safari: kept in memory, saved as one Blob at the end.
-  const chunks: VideoChunk[] = []
+  // iOS: each write goes to IndexedDB as it comes.
+  let seq = 0
   return {
     store: 'idb',
     saved,
     stream: new WritableStream<VideoChunk>({
-      write: (chunk) => {
+      write: async (chunk) => {
         grow(chunk)
-        // The muxer may reuse its buffer once the write resolves.
-        chunks.push({ ...chunk, data: chunk.data.slice() })
+        // A copy: the muxer may reuse its buffer once the write resolves.
+        const data = new Blob([chunk.data.slice()])
+        await putVideoChunk({ file, seq: seq++, position: chunk.position, data, at: Date.now() })
       },
-      close: async () => {
-        const bytes = new Uint8Array(size)
-        for (const c of chunks) bytes.set(c.data, c.position)
-        await putVideoBlob(file, new Blob([bytes], { type: 'video/mp4' }))
-        resolveSaved(size)
-      },
+      close: () => resolveSaved(size),
       abort: (reason) => rejectSaved(reason),
     }),
   }
 }
 
+/**
+ * A recording kept in IndexedDB chunks, as one Blob. Appended chunks are
+ * joined as they are (the Blobs stay on disk); writes that went back to an
+ * earlier position are laid out in memory.
+ */
+async function joinChunks(file: string, type: string): Promise<Blob | null> {
+  const chunks = await getVideoChunks(file)
+  if (chunks.length === 0) return null
+  let end = 0
+  const appended = chunks.every((c) => {
+    const inOrder = c.position === end
+    end += c.data.size
+    return inOrder
+  })
+  if (appended)
+    return new Blob(
+      chunks.map((c) => c.data),
+      { type },
+    )
+  const size = Math.max(...chunks.map((c) => c.position + c.data.size))
+  const bytes = new Uint8Array(size)
+  for (const c of chunks) bytes.set(new Uint8Array(await c.data.arrayBuffer()), c.position)
+  return new Blob([bytes], { type })
+}
+
 export async function readVideo(ref: VideoRef): Promise<Blob | null> {
-  if (ref.store === 'idb') return (await getVideoBlob(ref.file)) ?? null
+  // Saved whole by an older version, else in chunks.
+  if (ref.store === 'idb')
+    return (await getVideoBlob(ref.file)) ?? joinChunks(ref.file, ref.mimeType)
   try {
     const dir = await recordingsDir()
     const handle = await dir?.getFileHandle(ref.file)
@@ -147,12 +184,54 @@ export async function readVideo(ref: VideoRef): Promise<Blob | null> {
 }
 
 export async function deleteVideo(ref: VideoRef): Promise<void> {
-  if (ref.store === 'idb') return deleteVideoBlob(ref.file)
+  if (ref.store === 'idb') {
+    await Promise.all([deleteVideoBlob(ref.file), deleteVideoChunks(ref.file)])
+    return
+  }
   try {
     await (await recordingsDir())?.removeEntry(ref.file)
   } catch {
     // Already gone.
   }
+}
+
+/** A file written to this recently may be a recording still going: left alone. */
+const FRESH_MS = 60_000
+
+/**
+ * Removes recordings no session points to any more: what a crash or a closed
+ * tab left behind. `keep`: the files sessions refer to.
+ */
+export async function pruneRecordings(keep: ReadonlySet<string>): Promise<number> {
+  let removed = 0
+  const dir = await recordingsDir()
+  if (dir) {
+    for await (const [name, handle] of dir.entries()) {
+      if (keep.has(name) || handle.kind !== 'file') continue
+      try {
+        const file = await (handle as FileSystemFileHandle).getFile()
+        if (Date.now() - file.lastModified < FRESH_MS) continue
+        await dir.removeEntry(name)
+        removed += 1
+      } catch {
+        // Locked by a recording, or gone already.
+      }
+    }
+  }
+  for (const name of await listVideoKeys()) {
+    if (keep.has(name)) continue
+    const latest = Math.max(0, ...(await getVideoChunks(name)).map((c) => c.at))
+    if (Date.now() - latest < FRESH_MS) continue
+    await Promise.all([deleteVideoBlob(name), deleteVideoChunks(name)])
+    removed += 1
+  }
+  return removed
+}
+
+/** At launch: the recordings a crash or a closed tab left with no session. */
+export async function pruneOrphanRecordings(): Promise<number> {
+  const keep = new Set((await listSummaries()).flatMap((s) => s.videoFiles))
+  return pruneRecordings(keep)
 }
 
 /** Removes every recording (Settings → delete everything). */

@@ -16,15 +16,22 @@ export interface Chapter {
 const PRE_ROLL_S = 1
 const POST_ROLL_S = 0.5
 
-/** Chapters for the rallies a recording covers. `soundsPerHit` as in stats. */
+/**
+ * Chapters for the rallies a recording covers. `soundsPerHit` as in stats.
+ * `videoEndedAt`: the last frame; rallies played after it (the camera was
+ * off) are in another recording, or none.
+ */
 export function chapters(
   rallies: readonly Rally[],
   videoStartedAt: number,
   soundsPerHit: 1 | 2,
+  videoEndedAt = Infinity,
 ): Chapter[] {
   const list = rallies
     .map((r, index) => ({ r, index, count: rallyCount(r, soundsPerHit) }))
-    .filter(({ r, count }) => count > 0 && r.endedAt >= videoStartedAt)
+    .filter(
+      ({ r, count }) => count > 0 && r.endedAt >= videoStartedAt && r.startedAt <= videoEndedAt,
+    )
     .map(({ r, index, count }) => ({
       index,
       start: Math.max(0, (r.startedAt - videoStartedAt) / 1000 - PRE_ROLL_S),

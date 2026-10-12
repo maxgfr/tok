@@ -26,7 +26,8 @@ export function DayChart({ points }: { points: DayPoint[] }) {
   const y = (v: number) => PAD.top + ih - (v / top) * ih
   const path = (key: 'best' | 'average') =>
     points.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p[key]).toFixed(1)}`).join('')
-  const ticks = [0, Math.round(top / 2), top]
+  // A best of 1 has no half-way mark of its own: no tick twice.
+  const ticks = [...new Set([0, Math.round(top / 2), top])]
   const active = hover !== null ? points[hover] : undefined
   const last = points.length - 1
 

@@ -3,8 +3,13 @@
 // earlier, so the cut is re-encoded rather than copied. Mediabunny is loaded
 // only when a clip is asked for.
 
-/** The part of `recording` from `start` to `end` seconds, as an MP4. */
-export async function exportClip(recording: Blob, start: number, end: number): Promise<Blob> {
+/** The part of `recording` from `start` to `end` seconds, as an MP4. `signal` stops it midway. */
+export async function exportClip(
+  recording: Blob,
+  start: number,
+  end: number,
+  signal?: AbortSignal,
+): Promise<Blob> {
   const { BlobSource, BufferTarget, Conversion, Input, MP4, Mp4OutputFormat, Output, WEBM } =
     await import('mediabunny')
   // Only the containers tok itself writes.
@@ -20,7 +25,16 @@ export async function exportClip(recording: Blob, start: number, end: number): P
       showWarnings: false,
     })
     if (!conversion.isValid) throw new Error('This recording cannot be cut on this device.')
-    await conversion.execute()
+    signal?.throwIfAborted()
+    // Leaving the screen stops the encoding instead of letting it run on.
+    const cancel = () => void conversion.cancel()
+    signal?.addEventListener('abort', cancel, { once: true })
+    try {
+      await conversion.execute()
+    } finally {
+      signal?.removeEventListener('abort', cancel)
+    }
+    signal?.throwIfAborted()
     if (!target.buffer) throw new Error('The clip came out empty.')
     return new Blob([target.buffer], { type: 'video/mp4' })
   } finally {

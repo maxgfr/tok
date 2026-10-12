@@ -8,7 +8,7 @@ interface Props {
 const H = 120
 const GAP = 2
 
-/** One bar per rally, oldest first; the longest is drawn in best-yellow. */
+/** One bar per rally, oldest first; the longest is drawn in best-yellow (a 0 is no best). */
 export function RallyBars({ counts, label }: Props) {
   const [hover, setHover] = useState<number | null>(null)
   if (counts.length === 0) return null
@@ -55,7 +55,7 @@ export function RallyBars({ counts, label }: Props) {
                 width={w}
                 height={h}
                 rx={Math.min(4, w / 2)}
-                fill={c === best ? 'var(--color-best)' : 'var(--color-chalk-faint)'}
+                fill={c === best && best > 0 ? 'var(--color-best)' : 'var(--color-chalk-faint)'}
                 opacity={hover === null || hover === i ? 1 : 0.55}
               />
             </g>

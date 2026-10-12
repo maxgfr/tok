@@ -4,6 +4,7 @@ import { matchPoints } from '../../engine/live.ts'
 import { replay } from '../../engine/scoring/index.ts'
 import { sport } from '../../engine/sports.ts'
 import { rallyCount, tempo } from '../../engine/stats.ts'
+import type { Rally } from '../../engine/types.ts'
 import { deleteVideo } from '../../record/videoStore.ts'
 import { deleteSession, getSession, saveSession, type SessionRecord } from '../../store/db.ts'
 import { RallyBars } from '../components/RallyBars.tsx'
@@ -15,6 +16,8 @@ export function SessionDetail({ id }: { id: string }) {
   const [confirmDelete, setConfirmDelete] = useState(false)
   // The rally being corrected, and the count typed so far.
   const [editing, setEditing] = useState<{ index: number; draft: string } | null>(null)
+  // The rallies as they were before the last deletion, for Undo.
+  const [deleted, setDeleted] = useState<{ index: number; rallies: Rally[] } | null>(null)
 
   useEffect(() => {
     void getSession(id).then((s) => setSession(s ?? null))
@@ -51,10 +54,15 @@ export function SessionDetail({ id }: { id: string }) {
     await saveSession(next)
     setSession(next)
     setEditing(null)
+    setDeleted(null)
   }
   const correct = (index: number, count: number) =>
     keep(session.rallies.map((r, i) => (i === index ? { ...r, count } : r)))
-  const removeRally = (index: number) => keep(session.rallies.filter((_, i) => i !== index))
+  const removeRally = async (index: number) => {
+    const before = session.rallies
+    await keep(before.filter((_, i) => i !== index))
+    setDeleted({ index, rallies: before })
+  }
 
   const remove = async () => {
     await Promise.all((session.videos ?? []).map(deleteVideo))
@@ -123,6 +131,18 @@ export function SessionDetail({ id }: { id: string }) {
         <h2 id="rallies-h" className="text-sm font-semibold text-chalk-dim">
           Rallies
         </h2>
+        {deleted && (
+          <output className="flex items-center gap-3 rounded-lg bg-slate-2 px-3">
+            <span className="flex-1">Rally {deleted.index + 1} deleted.</span>
+            <button
+              type="button"
+              onClick={() => void keep(deleted.rallies)}
+              className="min-h-11 font-semibold text-chalk underline underline-offset-4"
+            >
+              Undo
+            </button>
+          </output>
+        )}
         <table className="w-full border-collapse text-left">
           <thead>
             <tr className="border-b border-rule text-xs text-chalk-dim">
