@@ -14,6 +14,7 @@ import { go } from '../router.ts'
 export function SessionDetail({ id }: { id: string }) {
   const [session, setSession] = useState<SessionRecord | null | undefined>(undefined)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [saveFailed, setSaveFailed] = useState(false)
   // The rally being corrected, and the count typed so far.
   const [editing, setEditing] = useState<{ index: number; draft: string } | null>(null)
   // The rallies as they were before the last deletion, for Undo.
@@ -51,17 +52,24 @@ export function SessionDetail({ id }: { id: string }) {
   // Detection is experimental: the player has the last word on every rally.
   const keep = async (rallies: SessionRecord['rallies']) => {
     const next = { ...session, rallies }
-    await saveSession(next)
+    try {
+      await saveSession(next)
+    } catch {
+      // Storage refused (full: it is shared with every app of this site): nothing changed.
+      setSaveFailed(true)
+      return false
+    }
+    setSaveFailed(false)
     setSession(next)
     setEditing(null)
     setDeleted(null)
+    return true
   }
   const correct = (index: number, count: number) =>
     keep(session.rallies.map((r, i) => (i === index ? { ...r, count } : r)))
   const removeRally = async (index: number) => {
     const before = session.rallies
-    await keep(before.filter((_, i) => i !== index))
-    setDeleted({ index, rallies: before })
+    if (await keep(before.filter((_, i) => i !== index))) setDeleted({ index, rallies: before })
   }
 
   const remove = async () => {
@@ -106,6 +114,12 @@ export function SessionDetail({ id }: { id: string }) {
             </p>
           )}
         </section>
+      )}
+
+      {saveFailed && (
+        <p role="alert" className="rounded-xl bg-side-b px-4 py-2 font-semibold text-slate">
+          Could not save to this phone. Storage may be full.
+        </p>
       )}
 
       <p className="text-lg text-chalk-dim">
