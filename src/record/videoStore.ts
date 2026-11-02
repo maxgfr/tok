@@ -14,7 +14,12 @@ import {
   type VideoRef,
 } from '../store/db.ts'
 
-const DIR = 'recordings'
+// The OPFS root belongs to the whole origin, and maxgfr.github.io serves many
+// apps: the directory carries the app's name. Earlier versions wrote to a
+// generic `recordings` directory another app may use too, so in there only
+// files a session points to are ever touched.
+const DIR = 'tok-recordings'
+const LEGACY_DIR = 'recordings'
 
 export interface VideoWriter {
   store: VideoRef['store']
@@ -23,12 +28,48 @@ export interface VideoWriter {
   close: () => Promise<number>
 }
 
-async function recordingsDir(): Promise<FileSystemDirectoryHandle | null> {
+async function recordingsDir(name = DIR): Promise<FileSystemDirectoryHandle | null> {
   try {
     const root = await navigator.storage?.getDirectory?.()
-    return root ? await root.getDirectoryHandle(DIR, { create: true }) : null
+    // The legacy directory is only read, never created.
+    return root ? await root.getDirectoryHandle(name, { create: name === DIR }) : null
   } catch {
     return null
+  }
+}
+
+/** A recording's file: in this app's directory, else where an earlier version left it. */
+async function readOpfs(name: string): Promise<File | null> {
+  for (const dirName of [DIR, LEGACY_DIR]) {
+    try {
+      const file = await (await (await recordingsDir(dirName))?.getFileHandle(name))?.getFile()
+      // Empty: the tab died before the file was closed (OPFS keeps writes aside until then).
+      if (file && file.size > 0) return file
+    } catch {
+      // Not in this one.
+    }
+  }
+  return null
+}
+
+type Movable = FileSystemFileHandle & { move?: (to: FileSystemDirectoryHandle) => Promise<void> }
+
+/**
+ * Moves the recordings sessions point to out of the legacy directory, where the
+ * browser can move files. Where it cannot they stay, and are read from there.
+ */
+async function moveLegacyRecordings(keep: ReadonlySet<string>): Promise<void> {
+  const legacy = await recordingsDir(LEGACY_DIR)
+  const dir = legacy && (await recordingsDir())
+  if (!legacy || !dir) return
+  for (const name of keep) {
+    try {
+      const handle = (await legacy.getFileHandle(name)) as Movable
+      if (!handle.move) return
+      await handle.move(dir)
+    } catch {
+      // Not there, or locked: left where it is.
+    }
   }
 }
 
@@ -173,15 +214,8 @@ export async function readVideo(ref: VideoRef): Promise<Blob | null> {
   // Saved whole by an older version, else in chunks.
   if (ref.store === 'idb')
     return (await getVideoBlob(ref.file)) ?? joinChunks(ref.file, ref.mimeType)
-  try {
-    const dir = await recordingsDir()
-    const handle = await dir?.getFileHandle(ref.file)
-    const file = await handle?.getFile()
-    // Empty: the tab died before the file was closed (OPFS keeps writes aside until then).
-    return file && file.size > 0 ? new Blob([file], { type: ref.mimeType }) : null
-  } catch {
-    return null
-  }
+  const file = await readOpfs(ref.file)
+  return file ? new Blob([file], { type: ref.mimeType }) : null
 }
 
 export async function deleteVideo(ref: VideoRef): Promise<void> {
@@ -189,10 +223,12 @@ export async function deleteVideo(ref: VideoRef): Promise<void> {
     await Promise.all([deleteVideoBlob(ref.file), deleteVideoChunks(ref.file)])
     return
   }
-  try {
-    await (await recordingsDir())?.removeEntry(ref.file)
-  } catch {
-    // Already gone.
+  for (const dirName of [DIR, LEGACY_DIR]) {
+    try {
+      await (await recordingsDir(dirName))?.removeEntry(ref.file)
+    } catch {
+      // Already gone.
+    }
   }
 }
 
@@ -232,11 +268,26 @@ export async function pruneRecordings(keep: ReadonlySet<string>): Promise<number
 /** At launch: the recordings a crash or a closed tab left with no session. */
 export async function pruneOrphanRecordings(): Promise<number> {
   const keep = new Set((await listSummaries()).flatMap((s) => s.videoFiles))
+  await moveLegacyRecordings(keep)
   return pruneRecordings(keep)
 }
 
-/** Removes every recording (Settings → delete everything). */
+/**
+ * Removes every recording (Settings → delete everything). Call it before the
+ * sessions are cleared: in the legacy directory, their list is what says which
+ * files are this app's.
+ */
 export async function clearVideos(): Promise<void> {
+  const legacy = await recordingsDir(LEGACY_DIR)
+  if (legacy) {
+    for (const name of new Set((await listSummaries()).flatMap((s) => s.videoFiles))) {
+      try {
+        await legacy.removeEntry(name)
+      } catch {
+        // Not there.
+      }
+    }
+  }
   try {
     const root = await navigator.storage?.getDirectory?.()
     await root?.removeEntry(DIR, { recursive: true })

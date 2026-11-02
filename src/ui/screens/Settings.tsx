@@ -80,7 +80,9 @@ export function Settings() {
   }
 
   const wipe = async () => {
-    await Promise.all([clearAll(), clearVideos()])
+    // Videos first: the sessions say which recordings are this app's.
+    await clearVideos()
+    await clearAll()
     setWiped((n) => n + 1)
     setConfirmWipe(false)
     setMessage('Everything is wiped. Fresh board.')

@@ -4,6 +4,7 @@ import 'fake-indexeddb/auto'
 import { beforeEach, expect, test, vi } from 'vitest'
 import { clearAll, getVideoChunks, listVideoKeys, saveSession } from '../store/db.ts'
 import {
+  clearVideos,
   deleteVideo,
   openVideoSink,
   openVideoWriter,
@@ -116,4 +117,86 @@ test('at launch, a recording kept by a session survives and a lost one goes', as
   })
   expect(await pruneOrphanRecordings()).toBe(1)
   expect(await listVideoKeys()).toEqual(['s-1.webm'])
+})
+
+/** A minimal OPFS: directories of files, written long ago, that can be moved. */
+function fakeOpfs(tree: Record<string, string[]>) {
+  const old = Date.now() - 3_600_000
+  const dirs = new Map(Object.entries(tree).map(([d, files]) => [d, new Set(files)]))
+  const fileHandle = (dir: string, name: string) => ({
+    kind: 'file' as const,
+    getFile: async () => new File(['x'], name, { lastModified: old }),
+    move: async (to: { name: string }) => {
+      dirs.get(dir)!.delete(name)
+      dirs.get(to.name)!.add(name)
+    },
+  })
+  const dirHandle = (dir: string) => ({
+    name: dir,
+    getFileHandle: async (name: string) => {
+      if (!dirs.get(dir)!.has(name)) throw new DOMException('', 'NotFoundError')
+      return fileHandle(dir, name)
+    },
+    removeEntry: async (name: string) => {
+      if (!dirs.get(dir)!.delete(name)) throw new DOMException('', 'NotFoundError')
+    },
+    async *entries() {
+      for (const name of dirs.get(dir)!) yield [name, fileHandle(dir, name)] as const
+    },
+  })
+  const root = {
+    getDirectoryHandle: async (dir: string, opts?: { create?: boolean }) => {
+      if (!dirs.has(dir)) {
+        if (!opts?.create) throw new DOMException('', 'NotFoundError')
+        dirs.set(dir, new Set())
+      }
+      return dirHandle(dir)
+    },
+    removeEntry: async (dir: string) => void dirs.delete(dir),
+  }
+  vi.stubGlobal('navigator', { storage: { getDirectory: async () => root } })
+  return dirs
+}
+
+const session = (id: string, files: string[]) =>
+  saveSession({
+    id,
+    sportId: 'beach-rackets',
+    mode: 'rally',
+    startedAt: 1,
+    endedAt: 2,
+    sensors: ['manual'],
+    rallies: [],
+    match: null,
+    videos: files.map((file) => ({ ...ref(file, 'video/mp4'), store: 'opfs' as const, bytes: 1 })),
+  })
+
+test("recordings move out of the shared `recordings` directory, and another app's files stay", async () => {
+  const dirs = fakeOpfs({ recordings: ['s-1.mp4', 'someone-else.mp4'] })
+  try {
+    await session('s', ['s-1.mp4'])
+    expect(await pruneOrphanRecordings()).toBe(0)
+    expect([...dirs.get('tok-recordings')!]).toEqual(['s-1.mp4'])
+    expect([...dirs.get('recordings')!]).toEqual(['someone-else.mp4'])
+    const opfs = { ...ref('s-1.mp4', 'video/mp4'), store: 'opfs' as const }
+    expect((await readVideo(opfs))?.size).toBe(1)
+  } finally {
+    vi.unstubAllGlobals()
+  }
+})
+
+test('a recording left in the legacy directory is still read, deleted and wiped', async () => {
+  const dirs = fakeOpfs({ recordings: ['s-1.mp4', 's-2.mp4', 'someone-else.mp4'] })
+  try {
+    await session('s', ['s-1.mp4', 's-2.mp4'])
+    const opfs = (file: string) => ({ ...ref(file, 'video/mp4'), store: 'opfs' as const })
+    expect((await readVideo(opfs('s-1.mp4')))?.size).toBe(1)
+    await deleteVideo(opfs('s-1.mp4'))
+    expect([...dirs.get('recordings')!]).toEqual(['s-2.mp4', 'someone-else.mp4'])
+    await clearVideos()
+    expect([...dirs.get('recordings')!]).toEqual(['someone-else.mp4'])
+    expect(dirs.has('tok-recordings')).toBe(false)
+  } finally {
+    vi.unstubAllGlobals()
+  }
 })
